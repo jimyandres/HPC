@@ -1,0 +1,91 @@
+/*
+ * Uso de Open MP para la paralelizacion en la multiplicacion de matrices NxN
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <omp.h>
+
+#define N 500
+#define chunk 10
+
+
+void matrixMultCPU(int *A,int *B,int *C){
+	for(int i=0;i<N;i++){
+		for(int j=0;j<N;j++){
+			int acc=0;
+			for(int k=0;k<N;k++){
+				int m = A[i*N+k];
+				int n = B[k*N+j];
+				acc += m*n;
+			}
+		C[i*N+j] = acc;
+		}
+	}
+}
+
+int main(){
+	
+	int *A, *B, *C1, *d_C;
+	int size = N*N*sizeof(int);
+
+  	A = (int*)malloc(size);
+ 	B = (int*)malloc(size);
+ 	C1 = (int*)malloc(size);
+ 	d_C = (int*)malloc(size);
+
+	for(int i=0;i<N*N;i++){
+			A[i]=1;
+			B[i]=2;
+	}
+
+	//------------CPU----------------
+	clock_t tic = clock();
+	matrixMultCPU(A,B,C1);
+  	clock_t toc = clock();
+	printf("Tiempo CPU: %f segundos\n", (double)(toc - tic) / CLOCKS_PER_SEC);
+	//-------------------------------
+ 
+	int i,j,k, acc;
+
+	//------------OpenMP-------------
+	tic = clock();
+	#pragma omp parallel for private(i,j,k) shared(A,B,d_C) schedule(dynamic,chunk) reduction (+:acc)
+		for(i=0;i<N;i++){
+			for(j=0;j<N;j++){
+				acc = 0; 
+				for(k=0; k<N; k++)
+					acc += A[i*N+k] * B[k*N+j];
+			d_C[i*N+j] = acc;
+			}
+		}
+
+  	toc = clock();
+	printf("\n\nTiempo GPU: %f segundos\n", (double)(toc - tic) / CLOCKS_PER_SEC);
+	//--------------------------------
+  
+	free(A);
+	free(B);
+	free(C1);
+	free(d_C);
+	return 0;
+}
+
+
+/*
+
+RESULTADOS OBTENIDOS:
+
+			|		CPU		|		GPU		|		
+			---------------------------------
+|	N		|			t					|	MEJORA (%)		|
+----------------------------------------------------------------|	
+|	100		|	0,007842	|	0,007023	|	10,4437643458	|
+|	200		|	0,056081	|	0,041652	|	25,7288564755	|
+|	500		|	0,707555	|	0,620655	|	12,2817307488	|
+|	1000	|	6,648028	|	6,033606	|	9,2421692568	|
+|	1500	|	24,398489	|	22,411754	|	8,142860814		|
+|	2000	|	47,579339	|	43,735873	|	8,078014703		|
+
+*/
