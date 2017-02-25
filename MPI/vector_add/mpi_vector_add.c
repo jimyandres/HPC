@@ -3,15 +3,15 @@
 
 
 
-void vec_add(int *A, int *B, int *h_C, int COLS) {
+void vec_add(int *A, int *B, int *ha_C, int COLS) {
 	for(int i=0;i<COLS;i++){
-		h_C[i] = A[i] + B[i];
+		ha_C[i] = A[i] + B[i];
 	}
 }
 
 int main(int argc, char **argv) {
 	double t1, t2;
-	int *A, *B, *ha_C, *da_C, *d_A, *d_B, *d_C;
+	int *A, *B, *ha_C, *da_C, *p_A, *p_B, *p_C;
 	int size, count, COLS;
 
 	if(argc == 2) 
@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
 
 	//Get the rank of the process
 	int world_rank;
-	MPI_Comm_rank(MPI_COMM_WORLD, %world_rank);
+	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
 
 	/*******************CPU*******************/
@@ -82,7 +82,7 @@ int main(int argc, char **argv) {
 	}
 
 	//Take results
-	MPI_Gather(p_C, count, MPI_INT, da_C, MPI_INT, 0, MPI_COMM_WORLD);
+	MPI_Gather(p_C, count, MPI_INT, da_C, count, MPI_INT, 0, MPI_COMM_WORLD);
 
 	t2 = MPI_Wtime();
 
