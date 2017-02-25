@@ -7,7 +7,7 @@
 #include <time.h>
 #include <omp.h>
 
-#define N 500
+#define N 1000
 #define chunk 10
 
 
@@ -66,7 +66,7 @@ int main(){
 
   	//toc = clock();
 	end = omp_get_wtime();
-	printf("\n\nTiempo GPU: %.5f segundos\n", (end - begin);
+	printf("\n\nTiempo GPU: %.5f segundos\n", (end - begin));
 	//--------------------------------
   
 	free(A);
