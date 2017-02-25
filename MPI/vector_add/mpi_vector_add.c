@@ -9,7 +9,7 @@ void vec_add(int *A, int *B, int *ha_C, int COLS) {
 	}
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char **argv) {
 	double t1, t2;
 	int *A, *B, *ha_C, *da_C, *p_A, *p_B, *p_C;
 	int size, count, COLS;
@@ -17,7 +17,7 @@ int main(int argc, char *argv[]) {
 	if(argc == 2) 
 		COLS = atoi(argv[1]);
 	else
-		return 1;
+		COLS = 10;
 
 	size = COLS * sizeof(int);
 
