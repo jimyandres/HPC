@@ -1,38 +1,23 @@
 #include <mpi.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <cstdlib>
 
-void vec_add(int *A, int *B, int *ha_C, int COLS) {
+#define MASTER 0
+#define COLS 100
+
+void vec_add(int *A, int *B, int *ha_C) {
 	for(int i=0;i<COLS;i++){
 		ha_C[i] = A[i] + B[i];
 	}
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char *argv[]) {
 	double t1, t2;
 	int *A, *B, *ha_C, *da_C, *p_A, *p_B, *p_C;
-	int size, count, COLS;
-
-	if(argc == 2) 
-		COLS = atoi(argv[1]);
-	else
-		COLS = 10;
-
-	size = COLS * sizeof(int);
-
-	A = (int*)malloc(size);
- 	B = (int*)malloc(size);
- 	ha_C = (int*)malloc(size);	//Host answer
- 	da_C = (int*)malloc(size);	//Device answer
-
-	for(int i=0;i<COLS;i++) {
-		A[i]=1;
-		B[i]=2;
-	}
+	int size, count;
 
 	//Initialize the MPI environment
-	MPI_Init(NULL,NULL);
+	MPI_Init(&argc, &argv);
 
 	//Get the number of processes
 	int world_size;
@@ -42,57 +27,101 @@ int main(int argc, char **argv) {
 	int world_rank;
 	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
+	if(world_rank == MASTER){	
+		/*******************CPU*******************/
+		
+		A = (int*)malloc(size);
+	        B = (int*)malloc(size);
+		ha_C = (int*)malloc(size);      //Host answer
+	        da_C = (int*)malloc(size);      //Device answer
 
-	/*******************CPU*******************/
+	        for(int i=0;i<COLS;i++) {
+	                A[i]=1;
+        	        B[i]=2;
+	        }
 
-	t1 = MPI_Wtime();
+		t1 = MPI_Wtime();
 
-	vec_add(A,B,ha_C, COLS);
+		vec_add(A,B,ha_C);
 
-	t2 = MPI_Wtime();
+		t2 = MPI_Wtime();
 
-	/*******************END*******************/
+		/*******************END*******************/
 
-	printf("CPU: %f\n", t2-t1);
+		printf("CPU: %f\n", t2-t1);
+/*
+		for (int i = 0; i < COLS; ++i) {
+			printf("+%d, ", ha_C[i]);
+		}
+*/
+		/*******************MPI*******************/
+	
+	 	count = COLS/world_size;
 
-	for (int i = 0; i < COLS; ++i) {
-		printf("%d, ", ha_C[i]);
+		if (COLS%world_size != 0) {
+			count += 1;
+			for(int i=0;i<(count*world_size-COLS);i++)
+				A[COLS+i] = B[COLS+i] = 0;
+		}
+
+	 	p_A = (int*)malloc(sizeof(int*)*count);
+	 	p_B = (int*)malloc(sizeof(int*)*count);
+	 	p_C = (int*)malloc(sizeof(int*)*count);
+
+		double t3 = MPI_Wtime();
+
+		MPI_Bcast(&count, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+		//Send A
+		MPI_Scatter(A, count, MPI_INT, p_A, count, MPI_INT, 0, MPI_COMM_WORLD);
+
+		//Send B
+		MPI_Scatter(B, count, MPI_INT, p_B, count, MPI_INT, 0, MPI_COMM_WORLD);
+
+		for (int i = 0; i < count; ++i)	{
+			p_C[i] = p_A[i] + p_B[i];
+			printf("a");
+		}
+
+		//Take results
+		MPI_Gather(p_C, count, MPI_INT, da_C, count, MPI_INT, 0, MPI_COMM_WORLD);
+
+		double t4 = MPI_Wtime();
+
+		/*******************END*******************/
+
+		//printf("\nGPU: \n");
+
+		for (int i = 0; i < COLS; ++i) {
+			printf("%d, ", da_C[i]);
+		}
+		printf("\nGPU: %f\n", t4-t3);
+		printf("Done.\n");
 	}
 
-	/*******************MPI*******************/
+	else {
 
- 	count = COLS/world_size;
- 	p_A = (int*)malloc(count);
- 	p_B = (int*)malloc(count);
- 	p_C = (int*)malloc(count);
+		MPI_Bcast(&count, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
+		p_A = (int*)malloc(sizeof(int*)*count);
+	 	p_B = (int*)malloc(sizeof(int*)*count);
+	 	p_C = (int*)malloc(sizeof(int*)*count);
 
-	t1 = MPI_Wtime();
+		//Send A
+		MPI_Scatter(A, count, MPI_INT, p_A, count, MPI_INT, 0, MPI_COMM_WORLD);
 
-	MPI_Bcast(&count, 1, MPI_INT, 0, MPI_COMM_WORLD);
+		//Send B
+		MPI_Scatter(B, count, MPI_INT, p_B, count, MPI_INT, 0, MPI_COMM_WORLD);
 
-	//Send A
-	MPI_Scatter(A, count, MPI_INT, p_A, count, MPI_INT, 0, MPI_COMM_WORLD);
+		for (int i = 0; i < count; i++)	{
+			p_C[i] = p_A[i] + p_B[i];
+		}
 
-	//Send B
-	MPI_Scatter(B, count, MPI_INT, p_B, count, MPI_INT, 0, MPI_COMM_WORLD);
+		//Take results
+		MPI_Gather(p_C, count, MPI_INT, da_C, count, MPI_INT, 0, MPI_COMM_WORLD);
 
-	for (int i = 0; i < count; ++i)	{
-		p_C[i] = p_A[i] + p_A[i];
-	}
-
-	//Take results
-	MPI_Gather(p_C, count, MPI_INT, da_C, count, MPI_INT, 0, MPI_COMM_WORLD);
-
-	t2 = MPI_Wtime();
-
-	/*******************END*******************/
-
-	printf("GPU: %f\n", t2-t1);
-
-	for (int i = 0; i < COLS; ++i) {
-		printf("%d, ", da_C[i]);
 	}
 
 	MPI_Finalize();
+	return 0;
 }
