@@ -26,10 +26,10 @@ void matrixMultCPU(int *A,int *B,int *C){
 }
 
 int main(){
-	
+	double begin, end;
 	int *A, *B, *C1, *d_C;
 	int size = N*N*sizeof(int);
-
+	
   	A = (int*)malloc(size);
  	B = (int*)malloc(size);
  	C1 = (int*)malloc(size);
@@ -41,16 +41,19 @@ int main(){
 	}
 
 	//------------CPU----------------
-	clock_t tic = clock();
+	//clock_t tic = clock();
+	begin = omp_get_wtime();
 	matrixMultCPU(A,B,C1);
-  	clock_t toc = clock();
-	printf("Tiempo CPU: %f segundos\n", (double)(toc - tic) / CLOCKS_PER_SEC);
+  	//clock_t toc = clock();
+	end = omp_get_wtime();
+	printf("Tiempo CPU: %.5f segundos\n", (end - begin));
 	//-------------------------------
  
 	int i,j,k, acc;
 
 	//------------OpenMP-------------
-	tic = clock();
+	//tic = clock();
+	begin = omp_get_wtime();
 	#pragma omp parallel for private(i,j,k) shared(A,B,d_C) schedule(dynamic,chunk) reduction (+:acc)
 		for(i=0;i<N;i++){
 			for(j=0;j<N;j++){
@@ -61,8 +64,9 @@ int main(){
 			}
 		}
 
-  	toc = clock();
-	printf("\n\nTiempo GPU: %f segundos\n", (double)(toc - tic) / CLOCKS_PER_SEC);
+  	//toc = clock();
+	end = omp_get_wtime();
+	printf("\n\nTiempo GPU: %.5f segundos\n", (end - begin);
 	//--------------------------------
   
 	free(A);
