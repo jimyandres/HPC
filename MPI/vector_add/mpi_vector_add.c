@@ -1,7 +1,6 @@
 #include <mpi.h>
 #include <stdio.h>
-
-
+#include <stdlib.h>
 
 void vec_add(int *A, int *B, int *ha_C, int COLS) {
 	for(int i=0;i<COLS;i++){
@@ -15,7 +14,7 @@ int main(int argc, char **argv) {
 	int size, count, COLS;
 
 	if(argc == 2) 
-		COLS = argv[1];
+		COLS = (int*)argv[1];
 	else
 		return 1;
 
@@ -78,7 +77,7 @@ int main(int argc, char **argv) {
 	MPI_Scatter(B, count, MPI_INT, p_B, count, MPI_INT, 0, MPI_COMM_WORLD);
 
 	for (int i = 0; i < count; ++i)	{
-		p_C = p_A[i] + p_A[i];
+		p_C[i] = p_A[i] + p_A[i];
 	}
 
 	//Take results
@@ -95,5 +94,4 @@ int main(int argc, char **argv) {
 	}
 
 	MPI_Finalize();
-
 }
