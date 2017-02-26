@@ -7,8 +7,10 @@
 
 int main(int argc, char *argv[]) {
 	double t1, t2;
-	int *A, *B, *ha_C, *da_C, *p_A, *p_B, *p_C;
+	int *A, *B, *C, *p_A, *p_B, *p_C;
 	int size, count;
+
+	size = sizeof(int)*COLS;
 
 	//Initialize the MPI environment
 	MPI_Init(&argc, &argv);
@@ -25,8 +27,7 @@ int main(int argc, char *argv[]) {
 
 		A = (int*)malloc(size);
 	    B = (int*)malloc(size);
-		ha_C = (int*)malloc(size);      //Host answer
-	    da_C = (int*)malloc(size);      //Device answer
+	    C = (int*)malloc(size);      //Device answer
 
         for(int i=0;i<COLS;i++) {
                 A[i]=1;
@@ -62,14 +63,14 @@ int main(int argc, char *argv[]) {
 		}
 
 		//Take results
-		MPI_Gather(p_C, count, MPI_INT, da_C, count, MPI_INT, 0, MPI_COMM_WORLD);
+		MPI_Gather(p_C, count, MPI_INT, C, count, MPI_INT, 0, MPI_COMM_WORLD);
 
 		t2 = MPI_Wtime();
 
 		/*******************END*******************/
 
 		for (int i = 0; i < COLS; ++i) {
-			printf("%d, ", da_C[i]);
+			printf("%d, ", C[i]);
 		}
 		printf("\nGPU: %f\n", t2-t1);
 		printf("Done.\n");
@@ -94,7 +95,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		//Take results
-		MPI_Gather(p_C, count, MPI_INT, da_C, count, MPI_INT, 0, MPI_COMM_WORLD);
+		MPI_Gather(p_C, count, MPI_INT, C, count, MPI_INT, 0, MPI_COMM_WORLD);
 
 	}
 
