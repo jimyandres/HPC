@@ -5,12 +5,6 @@
 #define MASTER 0
 #define COLS 100
 
-void vec_add(int *A, int *B, int *ha_C) {
-	for(int i=0;i<COLS;i++){
-		ha_C[i] = A[i] + B[i];
-	}
-}
-
 int main(int argc, char *argv[]) {
 	double t1, t2;
 	int *A, *B, *ha_C, *da_C, *p_A, *p_B, *p_C;
@@ -28,32 +22,17 @@ int main(int argc, char *argv[]) {
 	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
 	if(world_rank == MASTER){	
-		/*******************CPU*******************/
-		
+
 		A = (int*)malloc(size);
-	        B = (int*)malloc(size);
+	    B = (int*)malloc(size);
 		ha_C = (int*)malloc(size);      //Host answer
-	        da_C = (int*)malloc(size);      //Device answer
+	    da_C = (int*)malloc(size);      //Device answer
 
-	        for(int i=0;i<COLS;i++) {
-	                A[i]=1;
-        	        B[i]=2;
-	        }
+        for(int i=0;i<COLS;i++) {
+                A[i]=1;
+    	        B[i]=2;
+        }
 
-		t1 = MPI_Wtime();
-
-		vec_add(A,B,ha_C);
-
-		t2 = MPI_Wtime();
-
-		/*******************END*******************/
-
-		printf("CPU: %f\n", t2-t1);
-/*
-		for (int i = 0; i < COLS; ++i) {
-			printf("+%d, ", ha_C[i]);
-		}
-*/
 		/*******************MPI*******************/
 	
 	 	count = COLS/world_size;
@@ -68,7 +47,7 @@ int main(int argc, char *argv[]) {
 	 	p_B = (int*)malloc(sizeof(int*)*count);
 	 	p_C = (int*)malloc(sizeof(int*)*count);
 
-		double t3 = MPI_Wtime();
+		t1 = MPI_Wtime();
 
 		MPI_Bcast(&count, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
@@ -80,22 +59,19 @@ int main(int argc, char *argv[]) {
 
 		for (int i = 0; i < count; ++i)	{
 			p_C[i] = p_A[i] + p_B[i];
-			printf("a");
 		}
 
 		//Take results
 		MPI_Gather(p_C, count, MPI_INT, da_C, count, MPI_INT, 0, MPI_COMM_WORLD);
 
-		double t4 = MPI_Wtime();
+		t2 = MPI_Wtime();
 
 		/*******************END*******************/
-
-		//printf("\nGPU: \n");
 
 		for (int i = 0; i < COLS; ++i) {
 			printf("%d, ", da_C[i]);
 		}
-		printf("\nGPU: %f\n", t4-t3);
+		printf("\nGPU: %f\n", t2-t1);
 		printf("Done.\n");
 	}
 

@@ -2,4 +2,4 @@
 
 make #Optional
 
-#sbatch mpi_vector_add.sh
+sbatch mpi_vector_add.sh
