@@ -4,16 +4,16 @@
 
 #define MASTER 0
 
-#define NRA 5
-#define NCA 2 
-#define NCB 5
+#define NRA 50
+#define NCA 20 
+#define NCB 50
 
 int main(int argc, char *argv[]) {
 	double t1, t2;
 	int *p_A, *p_B, *p_C;
 	int count;
 
-	int A[NRA+2][NCA], B[NCA][NCB], C[NRA][NCB];
+	int A[NRA+4][NCA], B[NCA][NCB], C[NRA][NCB];
 
 	//Initialize the MPI environment
 	MPI_Init(&argc, &argv);
@@ -38,7 +38,6 @@ int main(int argc, char *argv[]) {
 				A[NRA][i] = 0;
 		}
 
-		
 		for(int i=0;i<NRA;i++) {
 			for (int j = 0; j < NCA; ++j) {
 		        A[i][j] = 1;
@@ -51,22 +50,6 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-/*		for (int i = 0; i <= NRA; ++i) {
-                        for (int j = 0; j < NCA; ++j)
-                        {
-                                printf("%d, ", A[i][j]);
-                        }
-                        printf("\n");
-                }
-		
-		for (int i = 0; i < NCA; ++i) {
-                        for (int j = 0; j < NCB; ++j)
-                        {
-                                printf("%d, ", B[i][j]);
-                        }
-                        printf("\n");
-                }
-*/
 	 	p_A = (int*)malloc(sizeof(int*)*NCA*count);
 	 	p_B = (int*)malloc(sizeof(int*)*NCA*NCB);
 	 	p_C = (int*)malloc(sizeof(int*)*count*NCB);
@@ -75,32 +58,21 @@ int main(int argc, char *argv[]) {
 
 		MPI_Bcast(&count, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-		//for (int i = 0; i < NRA; ++i) {
+		//Send A
+		MPI_Scatter(A, NCA*count, MPI_INT, p_A, NCA*count, MPI_INT, 0, MPI_COMM_WORLD);
 
-
-			//Send A
-			MPI_Scatter(A, NCA*count, MPI_INT, p_A, NCA*count, MPI_INT, 0, MPI_COMM_WORLD);
-
-			//Send B
-			MPI_Scatter(B, NCA*NCB, MPI_INT, p_B, NCA*NCB, MPI_INT, 0, MPI_COMM_WORLD);
-
-			for (int c = 0; c < count; ++c) {
-				for (int k = 0; k < NCB; ++k) {
-					p_C[c*NCB+k] = 0;
-					for (int j = 0; j < NCA; ++j) {
-						p_C[c*NCB+k] += p_A[c*NCA+j] * p_B[j*NCB+k];
-//						printf("%d*%d\n",p_A[c*NCA+j], p_B[j*NCB+k]);
-					}
+		//Send B
+		MPI_Bcast(&B, NCA*NCB, MPI_INT, 0, MPI_COMM_WORLD);
+		for (int c = 0; c < count; ++c) {
+			for (int k = 0; k < NCB; ++k) {
+				p_C[c*NCB+k] = 0;
+				for (int j = 0; j < NCA; ++j) {
+					p_C[c*NCB+k] += p_A[c*NCA+j] * B[j][k];
 				}
 			}
-			
-//			for (int i = 0; i < NCB*count; ++i)
-//				printf("%d,", p_C[i]);
-			
-			//Take results
-			//MPI_Reduce(p_C, C, count*NCB, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-			MPI_Gather(p_C, count*NCB, MPI_INT, C, count*NCB, MPI_INT, 0, MPI_COMM_WORLD);
-		//}
+		}
+		//Take results
+		MPI_Gather(p_C, count*NCB, MPI_INT, C, count*NCB, MPI_INT, 0, MPI_COMM_WORLD);
 
 		t2 = MPI_Wtime();
 
@@ -121,35 +93,27 @@ int main(int argc, char *argv[]) {
 
 		MPI_Bcast(&count, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-		//for (int i = 0; i < NRA; ++i) {
+		p_A = (int*)malloc(sizeof(int*)*NCA*count);
+                p_B = (int*)malloc(sizeof(int*)*NCA*NCB);
+	        p_C = (int*)malloc(sizeof(int*)*count*NCB);
+		
+		//Send A
+		MPI_Scatter(A, NCA*count, MPI_INT, p_A, NCA*count, MPI_INT, 0, MPI_COMM_WORLD);
 
-			p_A = (int*)malloc(sizeof(int*)*NCA*count);
-	                p_B = (int*)malloc(sizeof(int*)*NCA*NCB);
-        	        p_C = (int*)malloc(sizeof(int*)*count*NCB);
-			
-			//Send A
-			MPI_Scatter(A, NCA*count, MPI_INT, p_A, NCA*count, MPI_INT, 0, MPI_COMM_WORLD);
+		//Send B
+		MPI_Bcast(&B, NCA*NCB, MPI_INT, 0, MPI_COMM_WORLD);
 
-			//Send B
-			MPI_Scatter(B, NCA*NCB, MPI_INT, p_B, NCA*NCB, MPI_INT, 0, MPI_COMM_WORLD);
-
-			for (int c = 0; c < count; ++c) {
-				for (int k = 0; k < NCB; ++k) {
-					p_C[c*NCB+k] = 0;
-					for (int j = 0; j < NCA; ++j) {
-						p_C[c*NCB+k] += p_A[c*NCA+j] * p_B[j*NCB+k];
-						printf("%d*%d\n",p_A[c*NCA+j], p_B[j*NCB+k]);
-					}
+		for (int c = 0; c < count; ++c) {
+			for (int k = 0; k < NCB; ++k) {
+				p_C[c*NCB+k] = 0;
+				for (int j = 0; j < NCA; ++j) {
+					p_C[c*NCB+k] += p_A[c*NCA+j] * B[j][k];
 				}
 			}
-			
-			for (int i = 0; i < NCB*count; ++i)
-				printf("%d,", p_C[i]);
-			printf("\n");
-			//Take results
-			//MPI_Reduce(p_C, C, count*NCB, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-			MPI_Gather(p_C, count*NCB, MPI_INT, C, count*NCB, MPI_INT, 0, MPI_COMM_WORLD);
-		//}
+		}
+		
+		//Take results
+		MPI_Gather(p_C, count*NCB, MPI_INT, C, count*NCB, MPI_INT, 0, MPI_COMM_WORLD);
 	}
 
 	MPI_Finalize();
