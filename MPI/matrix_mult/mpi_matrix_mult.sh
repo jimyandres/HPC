@@ -2,8 +2,8 @@
 #
 #SBATCH --job-name=mpi_matrix_mult
 #SBATCH --output=res_mpi_matrix_mult.out
-#SBATCH --ntasks=4
-#SBATCH --nodes=3
+#SBATCH --ntasks=5
+#SBATCH --nodes=5
 #SBATCH --time=10:00
 #SBATCH --mem-per-cpu=100
 

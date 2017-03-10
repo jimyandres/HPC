@@ -4,13 +4,13 @@
 
 #define MASTER 0
 
-#define NRA 50
-#define NCA 20 
-#define NCB 50
+#define NRA 1000
+#define NCA 1000 
+#define NCB 1000
 
 int main(int argc, char *argv[]) {
 	double t1, t2;
-	int *p_A, *p_B, *p_C;
+	int *p_A, *p_C;
 	int count;
 
 	int A[NRA+4][NCA], B[NCA][NCB], C[NRA][NCB];
@@ -33,7 +33,7 @@ int main(int argc, char *argv[]) {
 	 	count = NRA/world_size;
 
 		if (NRA%world_size != 0) {
-			count += 1;
+			count += 2;
 			for(int i=0;i<(count*world_size-NRA);i++)
 				A[NRA][i] = 0;
 		}
@@ -51,7 +51,7 @@ int main(int argc, char *argv[]) {
 		}
 
 	 	p_A = (int*)malloc(sizeof(int*)*NCA*count);
-	 	p_B = (int*)malloc(sizeof(int*)*NCA*NCB);
+//	 	p_B = (int*)malloc(sizeof(int*)*NCA*NCB);
 	 	p_C = (int*)malloc(sizeof(int*)*count*NCB);
 
 		t1 = MPI_Wtime();
@@ -78,23 +78,23 @@ int main(int argc, char *argv[]) {
 
 		/*******************END*******************/
 
-		for (int i = 0; i < NCB; ++i) {
+		/*for (int i = 0; i < NCB; ++i) {
 			for (int j = 0; j < NRA; ++j)
 			{
 				printf("%d, ", C[i][j]);
 			}
 			printf("\n");
-		}
+		}*/
 		printf("\nGPU: %f\n", t2-t1);
 		printf("Done.\n");
 	}
 
-	else {
+	if (world_rank > MASTER) {
 
 		MPI_Bcast(&count, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
 		p_A = (int*)malloc(sizeof(int*)*NCA*count);
-                p_B = (int*)malloc(sizeof(int*)*NCA*NCB);
+//                p_B = (int*)malloc(sizeof(int*)*NCA*NCB);
 	        p_C = (int*)malloc(sizeof(int*)*count*NCB);
 		
 		//Send A

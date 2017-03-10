@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
 	sizeGray = sizeof(unsigned char)*n*m;
 
 	h_dataRawImage = (unsigned char*)malloc(size);
-	error = cudaMalloc((void**))&d_dataRawImage, size);
+	error = cudaMalloc((void**)&d_dataRawImage, size);
 	if(error != cudaSuccess) {
 		printf("Error in cudaMalloc for d_dataRawImage\n");
 		// exit(-1);
@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
 
 	Mat grayImage;
 
-	grayImage.create(n,m,CV_8UC1);
+	grayImage.create(m,n,CV_8UC1);
 	grayImage.data = h_imageOutput;
 
 	// Convert the image from BGR to gray scale format
@@ -103,7 +103,7 @@ int main(int argc, char **argv) {
 	gpu_time = ((double) (endGPU - startGPU)) / CLOCKS_PER_SEC;
 	printf("GPU time: %.10f\n", gpu_time);
 
-	free(h_dataRawImage);
+//	free(h_dataRawImage);
 	free(h_imageOutput);
 	cudaFree(d_dataRawImage);
 	cudaFree(d_imageOutput);
