@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
 
 	Mat image;
 	// Read the image on gray scale
-	image = imread(imageName,CV_LOAD_IMAGE_GRAYSCALE);
+	image = imread(imageName, CV_LOAD_IMAGE_GRAYSCALE);
 
 	// If image doesn't exists, or no image data given
 	if(argc != 2 || !image.data) {
@@ -72,8 +72,8 @@ int main(int argc, char **argv) {
 
 	blockSize = 32;
 
-	dim3 dimBlock(blockSize, blockSize, 1);
-	dim3 dimGrid(ceil(n/float(blockSize)), ceil(m/float(blockSize)), 1);
+	dim3 dimBlock(blockSize, blockSize);
+	dim3 dimGrid(ceil(n/float(blockSize)), ceil(m/float(blockSize)));
 
 	PictureKernell<<<dimGrid, dimBlock>>> (d_dataRawImage, d_imageOutput, n, m);
 
@@ -94,7 +94,7 @@ int main(int argc, char **argv) {
 	grayImage.create(m,n,CV_8UC1);
 	grayImage.data = h_imageOutput;
 
-	// Convert the image from BGR to gray scale format
+	// Convert the image from BGR to gray scale format whit OpenCV
 	// cvtColor(image, grayImage, CV_BGR2GRAY);
 
 	// Write image on disk
@@ -103,7 +103,6 @@ int main(int argc, char **argv) {
 	gpu_time = ((double) (endGPU - startGPU)) / CLOCKS_PER_SEC;
 	printf("GPU time: %.10f\n", gpu_time);
 
-//	free(h_dataRawImage);
 	free(h_imageOutput);
 	cudaFree(d_dataRawImage);
 	cudaFree(d_imageOutput);
