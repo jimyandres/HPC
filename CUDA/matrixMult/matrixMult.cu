@@ -4,26 +4,25 @@
 #include <time.h>
 
 
-__global__ void matrixMultGPU (int *A,int *B,int *C, int N){
+__global__ void matrixMultGPU (float *A, float *B, float *C, long N){
 	int col = threadIdx.x + blockDim.x * blockIdx.x;
 	int row = threadIdx.y + blockDim.y * blockIdx.y;
-	int acc;
+	float acc;
 	if(col < N && row < N){
-    acc = 0;
+		acc = 0.0;
 		for(int k=0;k<N;k++)
 			acc += A[row*N+k] * B[k*N+col];
 		C[row*N+col] = acc;
 	}
 }
 
-void matrixMultCPU(int *A,int *B,int *C, int N){
+void matrixMultCPU(float *A, float *B, float *C, long N){
+	float acc;
 	for(int i=0;i<N;i++){
 		for(int j=0;j<N;j++){
-			int acc=0;
+			acc=0.0;
 			for(int k=0;k<N;k++){
-				int m = A[i*N+k];
-				int n = B[k*N+j];
-				acc += m*n;
+				acc += A[i*N+k]*B[k*N+j];
 			}
 		C[i*N+j] = acc;
 		}
@@ -32,21 +31,21 @@ void matrixMultCPU(int *A,int *B,int *C, int N){
 
 int main(int argc, char **argv){
 	
-	long *A, *B, *C1, *C2;
-	long *d_A, *d_B, *d_C;
-
+	float *A, *B, *C1, *C2;
+	float *d_A, *d_B, *d_C;
+	double CPU, GPU;
 	if(argc != 2) {
 		printf("No size given\n");
 		return -1;
 	}
-	long N = strtol(argv[2], NULL, 10);
+	long N = strtol(argv[1], NULL, 10);
 
-	long size = N*N*sizeof(long);
+	float size = N*N*sizeof(float);
 
-  	A = (long*)malloc(size);
- 	B = (long*)malloc(size);
- 	C1 = (long*)malloc(size);
- 	C2 = (long*)malloc(size);
+  	A = (float*)malloc(size);
+ 	B = (float*)malloc(size);
+ 	C1 = (float*)malloc(size);
+ 	C2 = (float*)malloc(size);
 
 	for(int i=0;i<N*N;i++){
 			A[i]=1.0;
@@ -57,7 +56,9 @@ int main(int argc, char **argv){
 	clock_t tic = clock();
 	matrixMultCPU(A,B,C1, N);
   	clock_t toc = clock();
-	printf("Tiempo CPU: %f segundos\n", (double)(toc - tic) / CLOCKS_PER_SEC);
+	//printf("Tiempo CPU: %f segundos", (double)(toc - tic) / CLOCKS_PER_SEC);
+	CPU = (double)(toc - tic) / CLOCKS_PER_SEC;
+	printf("%f,",CPU);
 	//-------------------------------
   
 	cudaMalloc((void**)&d_A,size);
@@ -71,12 +72,14 @@ int main(int argc, char **argv){
 	dim3 dimBlock(32,32);
   	dim3 dimGrid(ceil(N/float(dimBlock.x)),ceil(N/float(dimBlock.y)),1);
 	
-  	clock_t tic = clock();
+  	clock_t tic2 = clock();
 	matrixMultGPU<<<dimGrid,dimBlock>>>(d_A,d_B,d_C,N);
   	//cudaDeviceSynchronize();
-	cudaMemcpy(C,d_C,size,cudaMemcpyDeviceToHost);
-  	clock_t toc = clock();
-	printf("\n\nTiempo: %f segundos\n", (double)(toc - tic) / CLOCKS_PER_SEC);
+	cudaMemcpy(C2,d_C,size,cudaMemcpyDeviceToHost);
+  	clock_t toc2 = clock();
+	//printf("\n\nTiempo GPU: %f segundos\n", (double)(toc2 - tic2) / CLOCKS_PER_SEC);
+	GPU = (double)(toc2 - tic2) / CLOCKS_PER_SEC;
+	printf("%f,%f\n",GPU,(CPU/GPU));
 	//--------------------------------
   
   	/*for(int i=0;i<N*N;i++){
