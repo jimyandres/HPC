@@ -19,7 +19,7 @@ __global__ void BGRtoGrayScale (unsigned char* d_Pin, unsigned char* d_Pout, int
 	}
 }
 
-void GPU_process(unsigned char& h_dataRawImage, unsigned char& h_imageOutput, int n, int m, int size, int sizeGray, int count, Mat& grayImage) {
+void GPU_process(unsigned char* h_dataRawImage, unsigned char* h_imageOutput, int n, int m, int size, int sizeGray, int count, Mat& grayImage, double& total) {
 	cudaError_t error = cudaSuccess;
 	clock_t startGPU, endGPU;
 	double gpu_time;
@@ -30,18 +30,16 @@ void GPU_process(unsigned char& h_dataRawImage, unsigned char& h_imageOutput, in
 	error = cudaMalloc((void**)&d_dataRawImage, size);
 	if(error != cudaSuccess) {
 		printf("Error in cudaMalloc for d_dataRawImage\n");
-		// exit(-1);
-		return -1;
+		exit(-1);
 	}
 
 	error = cudaMalloc((void**)&d_imageOutput, sizeGray);
 	if(error != cudaSuccess) {
 		printf("Error in cudaMalloc for d_imageOutput\n");
-		// exit(-1);
-		return -1;
+		exit(-1);
 	}
 
-	printf("GPU_process begin...\n");
+	printf("GPU time (%d times):\n", count);	
 
 	for (int i = 0; i < count; ++i)
 	{
@@ -49,8 +47,7 @@ void GPU_process(unsigned char& h_dataRawImage, unsigned char& h_imageOutput, in
 		error = cudaMemcpy(d_dataRawImage, h_dataRawImage, size, cudaMemcpyHostToDevice);
 		if (error != cudaSuccess) {
 			printf("Error copying data from h_dataRawImage to d_dataRawImage \n");
-			// exit(-1);
-			return -1;
+			exit(-1);
 		}
 
 		blockSize = 32;
@@ -65,20 +62,20 @@ void GPU_process(unsigned char& h_dataRawImage, unsigned char& h_imageOutput, in
 		error = cudaMemcpy(h_imageOutput, d_imageOutput, sizeGray, cudaMemcpyDeviceToHost);
 		if (error != cudaSuccess) {
 			printf("Error copying data from d_imageOutput to h_imageOutput \n");
-			// exit(-1);
-			return -1;
+			exit(-1);
 		}
 
 		endGPU = clock();
-	}
 
-	gpu_time = ((double) (endGPU - startGPU)) / CLOCKS_PER_SEC;
-	printf("GPU time: %.10f\n", gpu_time);
+		gpu_time = ((double) (endGPU - startGPU)) / CLOCKS_PER_SEC;
+		printf("%.10f\n", gpu_time);
+		total += gpu_time;
+	}
 
 	grayImage.data = h_imageOutput;
 
 	// Write image gotten by GPU process on disk
-	imwrite("\nGPU_res_GrayImage.jpg", grayImage);
+	imwrite("GPU_res_GrayImage.jpg", grayImage);
 
 	cudaFree(d_dataRawImage);
 	cudaFree(d_imageOutput);
@@ -86,7 +83,7 @@ void GPU_process(unsigned char& h_dataRawImage, unsigned char& h_imageOutput, in
 
 int main(int argc, char **argv) {
 	clock_t startCPU, endCPU;
-	double cpu_time;
+	double cpu_time, total_cpu = 0, total_gpu = 0;
 	char* imageName = argv[1];
 	long conv = strtol(argv[2], NULL, 10);
 	unsigned char *h_dataRawImage, *h_imageOutput;
@@ -118,13 +115,12 @@ int main(int argc, char **argv) {
 	Mat grayImage;
 	grayImage.create(m,n,CV_8UC1);
 
-	GPU_process(h_dataRawImage, h_imageOutput, n, m, size, sizeGray, count, grayImage) 
+	GPU_process(h_dataRawImage, h_imageOutput, n, m, size, sizeGray, count, grayImage, total_gpu);
 
 
 	/***********************CPU**************************/
 
-
-	printf("CPU process begin...\n");
+	printf("\nCPU time (%d times):\n", count);
 
 	for (int i = 0; i < count; ++i)
 	{
@@ -134,15 +130,24 @@ int main(int argc, char **argv) {
 		cvtColor(image, grayImage, CV_BGR2GRAY);
 
 		endCPU = clock();
+
+		cpu_time = ((double) (endCPU - startCPU)) / CLOCKS_PER_SEC;
+	        printf("%.10f\n", cpu_time);
+		total_cpu += cpu_time;
 	}
 
 	/*********************END CPU************************/
+	
+	total_cpu /= count;
+	total_gpu /= count;
+	
+	printf("\nMedia CPU = %.10f", total_cpu);
+	printf("\nMedia GPU = %.10f\n", total_gpu);
+	int p = 100*(total_gpu) / (total_cpu);
+	printf("\nAcceleration = %.10f (%d%% faster)", (total_cpu / total_gpu), p);
 
 	// Write image gotten by CPU process on disk
 	imwrite("CPU_res_GrayImage.jpg", grayImage);
-
-	cpu_time = ((double) (endCPU - startCPU)) / CLOCKS_PER_SEC;
-	printf("CPU time: %.10f\n", cpu_time);
 
 	free(h_imageOutput);
 
