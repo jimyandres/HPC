@@ -4,10 +4,10 @@
 #include <time.h>
 
 
-__global__ void matrixMultGPU (float *A, float *B, float *C, long N){
+__global__ void matrixMultGPU (double *A, double *B, double *C, int N){
 	int col = threadIdx.x + blockDim.x * blockIdx.x;
 	int row = threadIdx.y + blockDim.y * blockIdx.y;
-	float acc;
+	double acc;
 	if(col < N && row < N){
 		acc = 0.0;
 		for(int k=0;k<N;k++)
@@ -16,40 +16,39 @@ __global__ void matrixMultGPU (float *A, float *B, float *C, long N){
 	}
 }
 
-void matrixMultCPU(float *A, float *B, float *C, long N){
-	float acc;
+void matrixMultCPU(double *A, double *B, double *C, int N){
+	double acc;
 	for(int i=0;i<N;i++){
 		for(int j=0;j<N;j++){
 			acc=0.0;
-			for(int k=0;k<N;k++){
+			for(int k=0;k<N;k++)
 				acc += A[i*N+k]*B[k*N+j];
-			}
-		C[i*N+j] = acc;
+			C[i*N+j] = acc;
 		}
 	}
 }
 
 int main(int argc, char **argv){
-	
-	float *A, *B, *C1, *C2;
-	float *d_A, *d_B, *d_C;
+	cudaError_t error = cudaSuccess;	
+	double *A, *B, *C1, *C2;
+	double *d_A, *d_B, *d_C;
 	double CPU, GPU;
 	if(argc != 2) {
 		printf("No size given\n");
 		return -1;
 	}
-	long N = strtol(argv[1], NULL, 10);
+	int N = atoi(argv[1]);
 
-	float size = N*N*sizeof(float);
+	double size = N*N*sizeof(double);
 
-  	A = (float*)malloc(size);
- 	B = (float*)malloc(size);
- 	C1 = (float*)malloc(size);
- 	C2 = (float*)malloc(size);
+  	A = (double*)malloc(size);
+ 	B = (double*)malloc(size);
+ 	C1 = (double*)malloc(size);
+ 	C2 = (double*)malloc(size);
 
 	for(int i=0;i<N*N;i++){
-			A[i]=1.0;
-			B[i]=2.0;
+			A[i]=1;
+			B[i]=2;
 	}
 
 	//CPU----------------------------
@@ -61,16 +60,39 @@ int main(int argc, char **argv){
 	printf("%f,",CPU);
 	//-------------------------------
   
-	cudaMalloc((void**)&d_A,size);
-	cudaMalloc((void**)&d_B,size);
-	cudaMalloc((void**)&d_C,size);
+	error = cudaMalloc((void**)&d_A,size);
+	if(error != cudaSuccess){
+		printf("Error in cudaMalloc for d_A\n");
+		exit(0);
+	}
+	
+	error = cudaMalloc((void**)&d_B,size);
+	if(error != cudaSuccess){
+                printf("Error in cudaMalloc for d_B\n");
+                exit(0);
+        }
 
-	cudaMemcpy(d_A,A,size,cudaMemcpyHostToDevice);
-	cudaMemcpy(d_B,B,size,cudaMemcpyHostToDevice);
+	error = cudaMalloc((void**)&d_C,size);
+	if(error != cudaSuccess){
+                printf("Error in cudaMalloc for d_C\n");
+                exit(0);
+        }
+
+	error = cudaMemcpy(d_A,A,size,cudaMemcpyHostToDevice);
+	if(error != cudaSuccess){
+                printf("Error in cudaMemcpy for d_A\n");
+                exit(0);
+        }
+
+	error = cudaMemcpy(d_B,B,size,cudaMemcpyHostToDevice);
+	if(error != cudaSuccess){
+                printf("Error in cudaMemcpy for d_B\n");
+                exit(0);
+        }
 
 	//GPU----------------------------
 	dim3 dimBlock(32,32);
-  	dim3 dimGrid(ceil(N/float(dimBlock.x)),ceil(N/float(dimBlock.y)),1);
+  	dim3 dimGrid(ceil(N/(dimBlock.x)),ceil(N/(dimBlock.y)));
 	
   	clock_t tic2 = clock();
 	matrixMultGPU<<<dimGrid,dimBlock>>>(d_A,d_B,d_C,N);
