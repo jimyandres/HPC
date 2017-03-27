@@ -70,9 +70,9 @@ std::string testValues(double *A, double *B, int N){
 	for(int i = 0; i < N; ++i)
 		for(int j = 0; j < N; ++j)
 			if(A[(i*N)+j]!=B[(i*N)+j]){
-				return "Mal Cálculo";
+				return "Wrong";
 			}
-		return "Buen Cálculo";
+		return "Correct";
 }
 
 void printMatrix(double *A, int N){

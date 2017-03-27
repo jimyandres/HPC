@@ -10,7 +10,7 @@
 for i in {100,500,1000,1500}; do
 	echo "**N** = $i"
 	echo
-	echo "| n | Serial | CUDA w/o CheckMem | Acceleration | Check Resutl | CUDA w/ CheckMem | Acceleration | Check Resutl |"
+	echo "| n | Serial | CUDA w/o CheckMem | Acceleration | CheckResult | CUDA w/ CheckMem | Acceleration | CheckResult |"
 	echo "| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |"
 	for (( j = 0; j < 20; j++ )); do
 		echo -n "| $j | "
