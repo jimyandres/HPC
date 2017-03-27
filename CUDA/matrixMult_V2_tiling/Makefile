@@ -1,6 +1,6 @@
 CUDAC 	= nvcc
 
-FLAGS 	= -O3
+FLAGS 	= -O3 -arch=sm_30
 
 all: matrixMult_V2
 
