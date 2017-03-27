@@ -2,14 +2,15 @@
 #include <stdlib.h>
 #include <cuda.h>
 #include <time.h>
+#include <string>
 
 
 __global__ void matrixMultGPU (double *A, double *B, double *C, int N){
 	int col = threadIdx.x + blockDim.x * blockIdx.x;
 	int row = threadIdx.y + blockDim.y * blockIdx.y;
-	double acc;
+
 	if(col < N && row < N){
-		acc = 0.0;
+		double acc = 0.0;
 		for(int k=0;k<N;k++)
 			acc += A[row*N+k] * B[k*N+col];
 		C[row*N+col] = acc;
@@ -26,6 +27,13 @@ void matrixMultCPU(double *A, double *B, double *C, int N){
 			C[i*N+j] = acc;
 		}
 	}
+}
+
+std::string testValues(double *A, double *B, int N){
+    for(int i = 0; i < N*N; ++i)
+        if(A[i]!=B[i])
+            return "Mal Cálculo";
+    return "Buen Cálculo";
 }
 
 int main(int argc, char **argv){
@@ -92,38 +100,51 @@ int main(int argc, char **argv){
 
 	//GPU----------------------------
 	dim3 dimBlock(32,32);
-  	dim3 dimGrid(ceil(N/(dimBlock.x)),ceil(N/(dimBlock.y)));
+  	dim3 dimGrid(ceil(N/float(dimBlock.x)),ceil(N/float(dimBlock.y)));
 	
   	clock_t tic2 = clock();
 	matrixMultGPU<<<dimGrid,dimBlock>>>(d_A,d_B,d_C,N);
-  	//cudaDeviceSynchronize();
-	cudaMemcpy(C2,d_C,size,cudaMemcpyDeviceToHost);
+  	cudaDeviceSynchronize();
+
+	error = cudaMemcpy(C2,d_C,size,cudaMemcpyDeviceToHost);
+	if(error != cudaSuccess){
+                printf("Error in cudaMemcpy for C2\n");
+                exit(0);
+        }
+
   	clock_t toc2 = clock();
 	//printf("\n\nTiempo GPU: %f segundos\n", (double)(toc2 - tic2) / CLOCKS_PER_SEC);
 	GPU = (double)(toc2 - tic2) / CLOCKS_PER_SEC;
-	printf("%f,%f\n",GPU,(CPU/GPU));
+	printf("%f,%f,%s\n",GPU,(CPU/GPU), testValues(C1,C2,N).c_str());
 	//--------------------------------
   
-  	/*for(int i=0;i<N*N;i++){
+  	/*
+	for(int i=0;i<N*N;i++){
 		if(i%N == 0)
-		printf("\n");
-			printf("%d ;",A[i]);
+			printf("\n");
+		printf("%f ;",A[i]);
 	}
 	printf("\n---------\n");
 	
 	for(int i=0;i<N*N;i++){
 		if(i%N == 0)
-		printf("\n");
-			printf("%d ;",B[i]);
+			printf("\n");
+		printf("%f ;",B[i]);
 	}
 	printf("\n---------\n");
 	for(int i=0;i<N*N;i++){
 		if(i%N == 0)
-		printf("\n");
-			printf("%d ;",C[i]);
+			printf("\n");
+		printf("%f ;",C1[i]);
 	}
-	printf("\n---------\n");*/
-
+	printf("\n---------\n");
+	for(int i=0;i<N*N;i++){
+                if(i%N == 0)
+                	printf("\n");
+                printf("%f ;",C2[i]);
+        }
+        printf("\n---------\n");
+	*/
 
 	free(A);
 	free(B);
@@ -133,7 +154,6 @@ int main(int argc, char **argv){
 	cudaFree(d_A);
 	cudaFree(d_B);
 	cudaFree(d_C);
-
 	
 	return 0;
 }

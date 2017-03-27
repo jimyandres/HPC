@@ -3,34 +3,42 @@
 #include <cuda.h>
 #include <time.h>
 #include <string>
+#include <math_functions.h>
 
 #define TILE_WIDTH 32
 
-__global__ void matrixMulKernelTiled(double *d_M, double *d_N, double *d_P, int N){
-    __shared__ double Mds[TILE_WIDTH][TILE_WIDTH];
-    __shared__ double Nds[TILE_WIDTH][TILE_WIDTH];
+__global__ void matrixMulKernelTiled(double *A, double *B, double *C, int N){
+	__shared__ double Mds[TILE_WIDTH][TILE_WIDTH];
+	__shared__ double Nds[TILE_WIDTH][TILE_WIDTH];
 
-    int bx = blockIdx.x;
-    int by = blockIdx.y;
-    int tx = threadIdx.x;
-    int ty = threadIdx.y;
+	int bx = blockIdx.x;
+	int by = blockIdx.y;
+	int tx = threadIdx.x;
+	int ty = threadIdx.y;
 
-    int row = by * TILE_WIDTH + ty;
-    int col = bx * TILE_WIDTH + tx;
+	int col = bx * TILE_WIDTH + tx;
+	int row = by * TILE_WIDTH + ty;
+	double Pvalue = 0.0;
+	
+	int Ntiles = (TILE_WIDTH + N - 1)/TILE_WIDTH;
+	for(int m = 0; m < Ntiles; ++m){
+		if ((m*TILE_WIDTH + tx) < N && row < N)
+			Mds[ty][tx] = A[row*N + m*TILE_WIDTH + tx];
+		else
+			Mds[ty][tx] = 0.0;
+		if ((m*TILE_WIDTH + ty) < N && col < N)
+			Nds[ty][tx] = B[(m*TILE_WIDTH + ty) * N + col];
+		else
+			Nds[ty][tx] = 0.0;
 
-    double Pvalue = 0.0;
+		__syncthreads();
 
-    for(int m = 0; m < N / TILE_WIDTH; ++m){
-	Mds[ty][tx] = d_M[row*N + m*TILE_WIDTH + tx];
-	Nds[ty][tx] = d_N[(m*TILE_WIDTH + ty) * N + col];
-	__syncthreads();
-
-	for(int k = 0; k < TILE_WIDTH; ++k){
-		Pvalue += Mds[ty][k] * Nds[k][tx];	    
+		for(int k = 0; k < TILE_WIDTH; ++k)
+			Pvalue += Mds[ty][k] * Nds[k][tx];
+		__syncthreads();
 	}
-	__syncthreads();
-    }
-    d_P[row*N+col] = Pvalue;
+	if (row < N && col < N)
+		C[row*N+col] = Pvalue;
 }
 
 
@@ -58,10 +66,10 @@ void matrixMultCPU(double *A, double *B, double *C, int N){
 	}
 }
 
-string testValues(double *A, double *B, int N){
-    for(int i = 0; i < width; ++i)
-        for(int j = 0; j < width; ++j)
-            if(A[(i*width)+j]!=B[(i*width)+j]){
+std::string testValues(double *A, double *B, int N){
+    for(int i = 0; i < N; ++i)
+        for(int j = 0; j < N; ++j)
+            if(A[(i*N)+j]!=B[(i*N)+j]){
                 return "Mal Cálculo";
             }
     return "Buen Cálculo";
@@ -72,7 +80,7 @@ int main(int argc, char **argv){
 	cudaError_t error = cudaSuccess;	
 	double *A, *B, *C1, *C2;
 	double *d_A, *d_B, *d_C;
-	double CPU, GPU, GPU_tiled;
+	double CPU, GPU_tiled;
 	if(argc != 2) {
 		printf("No size given\n");
 		return -1;
@@ -85,6 +93,9 @@ int main(int argc, char **argv){
  	B = (double*)malloc(size);
  	C1 = (double*)malloc(size);
  	C2 = (double*)malloc(size);
+
+	if (C2 == NULL)
+		return 0;
 
 	for(int i=0;i<N*N;i++){
 			A[i]=1;
@@ -131,38 +142,48 @@ int main(int argc, char **argv){
         }
 
 	/*******************************GPU TILED********************************/
-	dim3 dimBlock(32,32);
-  	dim3 dimGrid(ceil(N/(dimBlock.x)),ceil(N/(dimBlock.y)));
+	dim3 dimBlock(TILE_WIDTH, TILE_WIDTH,1);
+	dim3 dimGrid(ceil(N/float(dimBlock.x)),ceil(N/float(dimBlock.y)),1);
 	
   	clock_t tic2 = clock();
 	matrixMulKernelTiled<<<dimGrid,dimBlock>>>(d_A,d_B,d_C,N);
-  	cudaDeviceSynchronize();
+	//matrixMultGPU<<<dimGrid,dimBlock>>>(d_A,d_B,d_C,N);
+
+	cudaDeviceSynchronize();
+
 	cudaMemcpy(C2,d_C,size,cudaMemcpyDeviceToHost);
   	clock_t toc2 = clock();
 	//printf("\n\nTiempo GPU: %f segundos\n", (double)(toc2 - tic2) / CLOCKS_PER_SEC);
-	GPU = (double)(toc2 - tic2) / CLOCKS_PER_SEC;
-	printf("%f,%f,%s\n", GPU, (CPU/GPU), testValues(C1,C2,N));
+	GPU_tiled = (double)(toc2 - tic2) / CLOCKS_PER_SEC;
+	printf("%f,%f,%s\n", GPU_tiled, (CPU/GPU_tiled), testValues(C1,C2,N).c_str());
 	/*****************************GPU TILED END******************************/
-  
-  	/*for(int i=0;i<N*N;i++){
+  	/*
+  	for(int i=0;i<N*N;i++){
 		if(i%N == 0)
 		printf("\n");
-			printf("%d ;",A[i]);
+			printf("%f ;",A[i]);
 	}
 	printf("\n---------\n");
 	
 	for(int i=0;i<N*N;i++){
 		if(i%N == 0)
 		printf("\n");
-			printf("%d ;",B[i]);
+			printf("%f ;",B[i]);
 	}
 	printf("\n---------\n");
 	for(int i=0;i<N*N;i++){
 		if(i%N == 0)
 		printf("\n");
-			printf("%d ;",C[i]);
+			printf("%f ;",C1[i]);
 	}
-	printf("\n---------\n");*/
+	printf("\n---------\n");
+	for(int i=0;i<N*N;i++){
+                if(i%N == 0)
+                printf("\n");
+                        printf("%f ;",C2[i]);
+        }
+        printf("\n---------\n");
+	*/	
 
 
 	free(A);

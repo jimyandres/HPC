@@ -7,11 +7,10 @@
 #SBATCH --time=10:00
 #SBATCH --gres=gpu:1
 
-for i in {10,50}; do
+for i in {100,500,1000,1500}; do
 	echo "N = $i",,,
 	for (( j = 0; j < 20; j++ )); do
 		echo -n "$j,"
-		srun matrixMult_v2 $i 
+		srun matrixMult_V2 $i 
 	done
 done
-

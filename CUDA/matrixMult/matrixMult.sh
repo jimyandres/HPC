@@ -8,7 +8,7 @@
 #SBATCH --gres=gpu:1
 
 for i in {100,500,1000,1500}; do
-	echo "N = $i",,,
+	echo "N = $i",,,,
 	for (( j = 0; j < 20; j++ )); do
 		echo -n "$j,"
 		srun matrixMult $i 
