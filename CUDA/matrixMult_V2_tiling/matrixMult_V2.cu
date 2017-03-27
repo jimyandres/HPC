@@ -124,8 +124,8 @@ void cuda(double *A, double *B, double *C, double &time, double size, int N) {
 	error = cudaMemcpy(d_B,B,size,cudaMemcpyHostToDevice);
 	checkError(error, "cudaMemcpy for d_B (cuda)");
 		
-	dim3 dimBlock(32,32);
-	dim3 dimGrid(ceil(N/float(dimBlock.x)),ceil(N/float(dimBlock.y)));
+	dim3 dimBlock(32,32,1);
+	dim3 dimGrid(ceil(N/float(dimBlock.x)),ceil(N/float(dimBlock.y)),1);
 
 	matrixMultGPU<<<dimGrid,dimBlock>>>(d_A,d_B,d_C,N);
 	cudaDeviceSynchronize();
@@ -163,8 +163,8 @@ void cuda_tiled(double *A, double *B, double *C, double &time, double size, int 
 	error = cudaMemcpy(d_B,B,size,cudaMemcpyHostToDevice);
 	checkError(error, "cudaMemcpy for d_B (cuda with tiling)");
 	
-	dim3 dimBlock(TILE_WIDTH,TILE_WIDTH);
-	dim3 dimGrid(ceil(N/float(dimBlock.x)),ceil(N/float(dimBlock.y)));
+	dim3 dimBlock(TILE_WIDTH,TILE_WIDTH,1);
+	dim3 dimGrid(ceil(N/float(dimBlock.x)),ceil(N/float(dimBlock.y)),1);
 
 	matrixMulKernelTiled<<<dimGrid,dimBlock>>>(d_A,d_B,d_C,N);
 	cudaDeviceSynchronize();
