@@ -20,8 +20,7 @@ __global__ void matrixMulKernelTiled(double *A, double *B, double *C, int N){
 	int row = by * TILE_WIDTH + ty;
 	double Pvalue = 0.0;
 	
-	int Ntiles = (TILE_WIDTH + N - 1)/TILE_WIDTH;
-	for(int m = 0; m < Ntiles; ++m){
+	for(int m = 0; m < (TILE_WIDTH + N - 1)/TILE_WIDTH; ++m){
 		if ((m*TILE_WIDTH + tx) < N && row < N)
 			Mds[ty][tx] = A[row*N + m*TILE_WIDTH + tx];
 		else
