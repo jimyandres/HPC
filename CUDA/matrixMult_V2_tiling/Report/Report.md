@@ -2,7 +2,7 @@
 
 **N** = 100
 
-| n | Serial | CUDA w/o CheckMem | Acceleration | CheckResult | CUDA w/ CheckMem | Acceleration | CheckResult |
+| n | Serial | CUDA w/o SharedMem | Acceleration | CheckResult | CUDA w/ SharedMem | Acceleration | CheckResult |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | 0 |  0.006403 | 0.000132 | 48.507576 | Good | 0.000125 | 1.056000 | Good |
 | 1 |  0.001223 | 0.000126 | 9.706349 | Good | 0.000121 | 1.041322 | Good |
@@ -27,7 +27,7 @@
 
 **N** = 500
 
-| n | Serial | CUDA w/o CheckMem | Acceleration | CheckResult | CUDA w/ CheckMem | Acceleration | CheckResult |
+| n | Serial | CUDA w/o SharedMem | Acceleration | CheckResult | CUDA w/ SharedMem | Acceleration | CheckResult |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | 0 |  0.149287 | 0.003913 | 38.151546 | Good | 0.004046 | 0.967128 | Good |
 | 1 |  0.150312 | 0.003911 | 38.433137 | Good | 0.003899 | 1.003078 | Good |
@@ -52,7 +52,7 @@
 
 **N** = 1000
 
-| n | Serial | CUDA w/o CheckMem | Acceleration | CheckResult | CUDA w/ CheckMem | Acceleration | CheckResult |
+| n | Serial | CUDA w/o SharedMem | Acceleration | CheckResult | CUDA w/ SharedMem | Acceleration | CheckResult |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | 0 |  1.454348 | 0.024035 | 60.509590 | Good | 0.025673 | 0.936198 | Good |
 | 1 |  1.455143 | 0.024730 | 58.841205 | Good | 0.025627 | 0.964998 | Good |
@@ -77,7 +77,7 @@
 
 **N** = 1500
 
-| n | Serial | CUDA w/o CheckMem | Acceleration | CheckResult | CUDA w/ CheckMem | Acceleration | CheckResult |
+| n | Serial | CUDA w/o SharedMem | Acceleration | CheckResult | CUDA w/ SharedMem | Acceleration | CheckResult |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | 0 |  5.909554 | 0.077704 | 76.052121 | Good | 0.069373 | 1.120090 | Good |
 | 1 |  5.907097 | 0.070921 | 83.291225 | Good | 0.070019 | 1.012882 | Good |
