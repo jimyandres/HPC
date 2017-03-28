@@ -7,9 +7,9 @@
 
 #define TILE_WIDTH 32
 
-__global__ void matrixMulKernelTiled(double *A, double *B, double *C, int N){
-	__shared__ double Mds[TILE_WIDTH][TILE_WIDTH];
-	__shared__ double Nds[TILE_WIDTH][TILE_WIDTH];
+__global__ void matrixMulKernelTiled(float *A, float *B, float *C, int N){
+	__shared__ float Mds[TILE_WIDTH][TILE_WIDTH];
+	__shared__ float Nds[TILE_WIDTH][TILE_WIDTH];
 
 	int bx = blockIdx.x;
 	int by = blockIdx.y;
@@ -18,7 +18,7 @@ __global__ void matrixMulKernelTiled(double *A, double *B, double *C, int N){
 
 	int col = bx * TILE_WIDTH + tx;
 	int row = by * TILE_WIDTH + ty;
-	double Pvalue = 0.0;
+	float Pvalue = 0.0;
 	
 	for(int m = 0; m < (TILE_WIDTH + N - 1)/TILE_WIDTH; ++m){
 		if ((m*TILE_WIDTH + tx) < N && row < N)
@@ -41,10 +41,10 @@ __global__ void matrixMulKernelTiled(double *A, double *B, double *C, int N){
 }
 
 
-__global__ void matrixMultGPU (double *A, double *B, double *C, int N){
+__global__ void matrixMultGPU (float *A, float *B, float *C, int N){
 	int col = threadIdx.x + blockDim.x * blockIdx.x;
 	int row = threadIdx.y + blockDim.y * blockIdx.y;
-	double ans;
+	float ans;
 	if(col < N && row < N){
 		ans = 0.0;
 		for(int k=0;k<N;k++)
@@ -53,8 +53,8 @@ __global__ void matrixMultGPU (double *A, double *B, double *C, int N){
 	}
 }
 
-void matrixMultCPU(double *A, double *B, double *C, int N){
-	double ans;
+void matrixMultCPU(float *A, float *B, float *C, int N){
+	float ans;
 	for(int i=0;i<N;i++){
 		for(int j=0;j<N;j++){
 			ans=0.0;
@@ -65,7 +65,7 @@ void matrixMultCPU(double *A, double *B, double *C, int N){
 	}
 }
 
-std::string testValues(double *A, double *B, int N){
+std::string testValues(float *A, float *B, int N){
 	for(int i = 0; i < N; ++i)
 		for(int j = 0; j < N; ++j)
 			if(A[(i*N)+j]!=B[(i*N)+j]){
@@ -74,7 +74,7 @@ std::string testValues(double *A, double *B, int N){
 		return "Correct";
 }
 
-void printMatrix(double *A, int N){
+void printMatrix(float *A, int N){
 	for(int i=0;i<N*N;i++){
 		if(i%N == 0)
 		printf("\n");
@@ -84,7 +84,7 @@ void printMatrix(double *A, int N){
 }
 
 
-void serial(double *A, double *B, double *C, double &time, int N) {
+void serial(float *A, float *B, float *C, double &time, int N) {
 
 	/*******************************HOST********************************/
 	clock_t tic = clock();
@@ -102,9 +102,9 @@ void checkError(cudaError_t error, std::string type) {
 	}
 }
 
-void cuda(double *A, double *B, double *C, double &time, double size, int N) {
+void cuda(float *A, float *B, float *C, double &time, float size, int N) {
 	cudaError_t error = cudaSuccess;
-	double *d_A, *d_B, *d_C;
+	float *d_A, *d_B, *d_C;
 
 	error = cudaMalloc((void**)&d_A,size);
 	checkError(error, "cudaMalloc for d_A (cuda)");
@@ -141,9 +141,9 @@ void cuda(double *A, double *B, double *C, double &time, double size, int N) {
 	cudaFree(d_C);
 }
 
-void cuda_tiled(double *A, double *B, double *C, double &time, double size, int N) {
+void cuda_tiled(float *A, float *B, float *C, double &time, float size, int N) {
 	cudaError_t error = cudaSuccess;
-	double *d_A, *d_B, *d_C;
+	float *d_A, *d_B, *d_C;
 
 	error = cudaMalloc((void**)&d_A,size);
 	checkError(error, "cudaMalloc for d_A (cuda with tiling)");
@@ -182,7 +182,7 @@ void cuda_tiled(double *A, double *B, double *C, double &time, double size, int 
 
 
 int main(int argc, char **argv){	
-	double *A, *B, *C1, *C2, *C3;
+	float *A, *B, *C1, *C2, *C3;
 	double CPU, GPU, GPU_tiled, acc1, acc2;
 	CPU = GPU = GPU_tiled = acc1 = acc2 = 0.0;
 	
@@ -205,13 +205,13 @@ int main(int argc, char **argv){
 			op[2] = true;
 	}
 
-	double size = N*N*sizeof(double);
+	float size = N*N*sizeof(float);
 
-  	A = (double*)malloc(size);
- 	B = (double*)malloc(size);
- 	C1 = (double*)malloc(size);
- 	C2 = (double*)malloc(size);
-	C3 = (double*)malloc(size);
+  	A = (float*)malloc(size);
+ 	B = (float*)malloc(size);
+ 	C1 = (float*)malloc(size);
+ 	C2 = (float*)malloc(size);
+	C3 = (float*)malloc(size);
 
 	for(int i=0;i<N*N;i++){
 			A[i]=1;
