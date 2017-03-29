@@ -1,4 +1,6 @@
+# Report 
 
+## Results
 
 **N** = 100
 
@@ -100,3 +102,20 @@
 | 18 |  5,093095 | 0,046922 | 108,543860 | Correct | 0,014405 | 3,257341 | Correct |
 | 19 |  4,975898 | 0,046820 | 106,277189 | Correct | 0,014048 | 3,332859 | Correct |
 
+## Results on charts
+
+* Chart of resulted times: Comparison between Serial, CUDA with and without shared memory.
+
+![Image 1](https://github.com/jimyandres/HPC/blob/master/CUDA/matrixMult_V2_tiling/Report/Time_CUDA_Vs_Serial.png)
+
+* Chart of resulted times: Comparison between CUDA without shared memory and with shared memory.
+
+![Image 2](https://github.com/jimyandres/HPC/blob/master/CUDA/matrixMult_V2_tiling/Report/Time_CUDA_comparison.png)
+
+* Chart of resulted accelerations: Comparison between CUDA without shared memory and with shared memory.
+
+![Image 3](https://github.com/jimyandres/HPC/blob/master/CUDA/matrixMult_V2_tiling/Report/Acc_CUDA_comparison.png)
+
+* Chart of resulted acceleration: CUDA without shared memory.
+
+![Image 4](https://github.com/jimyandres/HPC/blob/master/CUDA/matrixMult_V2_tiling/Report/Acc_CUDA_without_SM.png)
