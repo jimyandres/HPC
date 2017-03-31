@@ -1,8 +1,155 @@
-# Report 
+# Informe
 
-## Results
+## Indice
 
-**N** = 100
+* [Introducción](#Introducción)
+* [Contenido](#Contenido)
+	* [Primera Versión: Algoritmo Secuencial](#Primera-Versión:-Algoritmo-Secuencial)
+	* [Segunda Versión: Algoritmo Paralelo sin memoria compartida](#Segunda-Versión:-Algoritmo-Paralelo-sin-memoria-compartida)
+	* [Tercera Versión: Algoritmo Paralelo con memoria compartida](#Tercera-Versión:-Algoritmo-Paralelo-con-memoria-compartida)
+* [Resultados](#Resultados)
+* [Gráficas Obtenidas](#Gráficas-Obtenidas)
+* [Conclusiones](#Conclusiones)
+
+## Introducción
+
+En el presente reporte, se plasman los resultados obtenidos por tres diferentes formas de computar la operación de multiplicación de matrices, donde cada matriz es de tamaño NxN. 
+
+Dichas versiones son: 
+
+* **Algoritmo secuencial,** mediante el uso de los recursos del Host o CPU
+* **Algoritmo Paralelo sin memoria compartida,**  mediante el uso del Device o GPU, y del compilador CUDA de Nvidia.
+*  **Algoritmo Paralelo con memoria compartida,** se hace uso de los mismos principios descritos en el anterior algoritmo, pero se adiciona el concepto de memoria compartida con el uso de Tiling.
+
+## Contenido
+
+### Primera Versión: Algoritmo Secuencial
+
+```
+void matrixMultCPU(float *A, float *B, float *C, int N){
+	float ans;
+	for(int i=0;i<N;i++){
+		for(int j=0;j<N;j++){
+			ans=0.0;
+			for(int k=0;k<N;k++)
+				ans += A[i*N+k]*B[k*N+j];
+			C[i*N+j] = ans;
+		}
+	}
+}
+```
+Este algoritmo es ejecutado en el Host, por lo que sólo hace uso de los recursos que proporcione la CPU. Esta versión es la mas simple y no hace uso de, por ejemplo,  Threads.
+
+### Segunda Versión: Algoritmo Paralelo sin memoria compartida
+
+```
+__global__ void matrixMultGPU (float *A, float *B, float *C, int N){
+	int col = threadIdx.x + blockDim.x * blockIdx.x;
+	int row = threadIdx.y + blockDim.y * blockIdx.y;
+	float ans;
+	if(col < N && row < N){
+		ans = 0.0;
+		for(int k=0;k<N;k++)
+			ans += A[row*N+k] * B[k*N+col];
+		C[row*N+col] = ans;
+	}
+}
+```
+Invocación del kernel:
+```
+dim3 dimBlock(32,32);
+dim3 dimGrid(ceil(N/float(dimBlock.x)),ceil(N/float(dimBlock.y)));
+matrixMultGPU<<<dimGrid,dimBlock>>>(d_A,d_B,d_C,N);
+```
+
+Esta version, es igualmente simple y no hace uso de las fuertes características que ofrecen las GPU.
+A pesar de ello, con esta versión se ilustran las características básicas que ofrece CUDA, como el uso de hilos, que proporciona una mejoría de rendimiento muy importante comparada con la primera versión. Dicha mejoría puede ser visualizada en las ilustraciones al final del documento.
+
+En este caso, se hace uso de la memoria global de la DRAM (Device RAM) del dispositivo, la cual es relativamente lenta, en cuanto a tiempo de acceso, comparada con por ejemplo los Registros y la memoria compartida.
+
+### Tercera Versión: Algoritmo Paralelo con memoria compartida
+```
+__global__ void matrixMulKernelTiled(float *A, float *B, float *C, int N){
+	__shared__ float Mds[TILE_WIDTH][TILE_WIDTH];
+	__shared__ float Nds[TILE_WIDTH][TILE_WIDTH];
+
+	int bx = blockIdx.x;
+	int by = blockIdx.y;
+	int tx = threadIdx.x;
+	int ty = threadIdx.y;
+
+	int col = bx * TILE_WIDTH + tx;
+	int row = by * TILE_WIDTH + ty;
+	float Pvalue = 0.0;
+	
+	for(int m = 0; m < N/TILE_WIDTH; ++m){
+		Mds[ty][tx] = A[row*N + m*TILE_WIDTH + tx];
+		Nds[ty][tx] = B[(m*TILE_WIDTH + ty) * N + col];
+		__syncthreads();
+
+		for(int k = 0; k < TILE_WIDTH; ++k)
+			Pvalue += Mds[ty][k] * Nds[k][tx];
+		__syncthreads();
+	}
+	if (row < N && col < N)
+		C[row*N+col] = Pvalue;
+}
+```
+Invocación del kernel:
+```
+dim3 dimBlock(TILE_WIDTH,TILE_WIDTH);
+dim3 dimGrid(ceil(N/float(dimBlock.x)),ceil(N/float(dimBlock.y)));
+matrixMulKernelTiled<<<dimGrid,dimBlock>>>(d_A,d_B,d_C,N);
+```
+Esta tercera versión agrega el concepto de memoria compartida, referida a aquella memoria caché que es (en tiempo de acceso) mucho más rápida que la Global Memory que se encuentra en la DRAM. De acuerdo a lo anterior, el uso de Tiling para tomar las ventajas de la memoria compartida.
+
+La implementación que es proporcionada como ejemplo por el SDK de CUDA, está limitada a tamaños de matrices de tipo NxN, donde N debe ser múltiplo del tamaño del Tile o baldosa (o tamaño del bloque, según se vea), ya que existirá solapamiento entre Tiles si no es cumplida esa propiedad, por lo que para solucionar esta situación, se sugiere inicializar dichos elementos de las Tiles en ceros.
+
+Siguiendo la solución parcial propuesta, se obtiene este kernel:
+```
+__global__ void matrixMulKernelTiled(float *A, float *B, float *C, int N){
+	__shared__ float Mds[TILE_WIDTH][TILE_WIDTH];
+	__shared__ float Nds[TILE_WIDTH][TILE_WIDTH];
+
+	int bx = blockIdx.x;
+	int by = blockIdx.y;
+	int tx = threadIdx.x;
+	int ty = threadIdx.y;
+
+	int col = bx * TILE_WIDTH + tx;
+	int row = by * TILE_WIDTH + ty;
+	float Pvalue = 0.0;
+	
+	for(int m = 0; m < (TILE_WIDTH + N - 1)/TILE_WIDTH; ++m){
+		if ((m*TILE_WIDTH + tx) < N && row < N)
+			Mds[ty][tx] = A[row*N + m*TILE_WIDTH + tx];
+		else
+			Mds[ty][tx] = 0.0;
+		if ((m*TILE_WIDTH + ty) < N && col < N)
+			Nds[ty][tx] = B[(m*TILE_WIDTH + ty) * N + col];
+		else
+			Nds[ty][tx] = 0.0;
+
+		__syncthreads();
+
+		for(int k = 0; k < TILE_WIDTH; ++k)
+			Pvalue += Mds[ty][k] * Nds[k][tx];
+		__syncthreads();
+	}
+	if (row < N && col < N)
+		C[row*N+col] = Pvalue;
+}
+```
+
+## Resultados
+
+Los siguientes resultados, consisten en la toma de tiempos de ejecución de los distintos algoritmos (o versiones) de la multiplicación de matrices. También, se evalúan los resultados, con el fin de evitar soluciones incorrectas.
+
+Las pruebas consistieron en ejecutar los algoritmos con diferentes tamaños de matrices (de tipo NxN), obtener sus respectivos tiempos y comparar los resultados para obtener la aceleración obtenida. Además, cada prueba se repitió 20 veces.
+
+Las pruebas se realizaron con los tamaños: 100x100, 500x500, 1000x1000 y 1500x1500.
+
+### **N** = 100
 
 | n | Serial | CUDA w/o SharedMem | Acceleration | CheckResult | CUDA w/ SharedMem | Acceleration | CheckResult |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -27,7 +174,7 @@
 | 18 |  0,001208 | 0,000088 | 13,727273 | Correct | 0,000064 | 1,375000 | Correct |
 | 19 |  0,001204 | 0,000086 | 14,000000 | Correct | 0,000065 | 1,323077 | Correct |
 
-**N** = 500
+### **N** = 500
 
 | n | Serial | CUDA w/o SharedMem | Acceleration | CheckResult | CUDA w/ SharedMem | Acceleration | CheckResult |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -52,7 +199,7 @@
 | 18 |  0,171669 | 0,002554 | 67,215740 | Correct | 0,001124 | 2,272242 | Correct |
 | 19 |  0,169803 | 0,002563 | 66,251658 | Correct | 0,001115 | 2,298655 | Correct |
 
-**N** = 1000
+### **N** = 1000
 
 | n | Serial | CUDA w/o SharedMem | Acceleration | CheckResult | CUDA w/ SharedMem | Acceleration | CheckResult |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -77,7 +224,7 @@
 | 18 |  1,193827 | 0,013770 | 86,697676 | Correct | 0,005225 | 2,635407 | Correct |
 | 19 |  1,220131 | 0,013746 | 88,762622 | Correct | 0,005562 | 2,471413 | Correct |
 
-**N** = 1500
+### **N** = 1500
 
 | n | Serial | CUDA w/o SharedMem | Acceleration | CheckResult | CUDA w/ SharedMem | Acceleration | CheckResult |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -102,20 +249,26 @@
 | 18 |  5,093095 | 0,046922 | 108,543860 | Correct | 0,014405 | 3,257341 | Correct |
 | 19 |  4,975898 | 0,046820 | 106,277189 | Correct | 0,014048 | 3,332859 | Correct |
 
-## Results on charts
+## Gráficas Obtenidas
 
-* Chart of resulted times: Comparison between Serial, CUDA with and without shared memory.
+* Gráfica de tiempos: Comparación entre la versión secuencial, CUDA con y sin uso de memoria compartida.
 
 ![Image 1](https://github.com/jimyandres/HPC/blob/master/CUDA/matrixMult_V2_tiling/Report/Time_CUDA_Vs_Serial.png)
 
-* Chart of resulted times: Comparison between CUDA without shared memory and with shared memory.
+* Gráfica de tiempos: Comparación entre las versiones de CUDA con y sin uso de memoria compartida.
 
 ![Image 2](https://github.com/jimyandres/HPC/blob/master/CUDA/matrixMult_V2_tiling/Report/Time_CUDA_comparison.png)
 
-* Chart of resulted accelerations: Comparison between CUDA without shared memory and with shared memory.
+* Gráfica de Aceleraciones: Comparación entre las versiones de CUDA con y sin uso de memoria compartida.
 
 ![Image 3](https://github.com/jimyandres/HPC/blob/master/CUDA/matrixMult_V2_tiling/Report/Acc_CUDA_comparison.png)
 
-* Chart of resulted acceleration: CUDA without shared memory.
+* Gráfica de Aceleraciones: CUDA sin memoria compartida.
 
 ![Image 4](https://github.com/jimyandres/HPC/blob/master/CUDA/matrixMult_V2_tiling/Report/Acc_CUDA_without_SM.png)
+
+## Conclusiones
+
+* A pesar de que la segunda versión, proporcionó una mejoría muy grande en cuanto al tiempo de ejecución comparado con la primera, indudablemente la tercera versión, mediante el uso de memoria compartida, es la 'vencedora' en ese sentido.
+* El tamaño de la baldosa para el Algoritmo de CUDA con memoria compartida, es un valor que se debe tener en cuenta a la hora de asignarlo, ya que entre más grande su tamaño, significa que se reduce el acceso a la memoria global.
+* Teniendo en cuenta que en la tercera version, se adicionan más pasos o instrucciones que se deben ejecutar por parte del Device, por las características de tiempo de acceso a la memoria compartida, dichos pasos son insignificantes, para la mejoría de rendimiento que se obtiene, llegando a ser para la prueba con un N  de 1500 de una aceleración de 350x aproximadamente, y de 3.25x respecto a la versión de CUDA sin memoria compartida.
