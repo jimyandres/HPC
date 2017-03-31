@@ -2,14 +2,14 @@
 
 ## Indice
 
-* [Introducción](#Introducción)
-* [Contenido](#Contenido)
-	* [Primera Versión: Algoritmo Secuencial](#Primera-Versión:-Algoritmo-Secuencial)
-	* [Segunda Versión: Algoritmo Paralelo sin memoria compartida](#Segunda-Versión:-Algoritmo-Paralelo-sin-memoria-compartida)
-	* [Tercera Versión: Algoritmo Paralelo con memoria compartida](#Tercera-Versión:-Algoritmo-Paralelo-con-memoria-compartida)
-* [Resultados](#Resultados)
-* [Gráficas Obtenidas](#Gráficas-Obtenidas)
-* [Conclusiones](#Conclusiones)
+* [Introducción](#introducción)
+* [Contenido](#contenido)
+	* [Primera Versión: Algoritmo Secuencial](#primera-versión-algoritmo-secuencial)
+	* [Segunda Versión: Algoritmo Paralelo sin memoria compartida](#segunda-versión-algoritmo-paralelo-sin-memoria-compartida)
+	* [Tercera Versión: Algoritmo Paralelo con memoria compartida](#tercera-versión-algoritmo-paralelo-con-memoria-compartida)
+* [Resultados](#resultados)
+* [Gráficas Obtenidas](#gráficas-obtenidas)
+* [Conclusiones](#conclusiones)
 
 ## Introducción
 
