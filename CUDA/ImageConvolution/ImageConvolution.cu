@@ -45,10 +45,10 @@ void serial_host(unsigned char* imgIn, int row, int col, unsigned int maskWidth,
 	/*****************************END HOST******************************/
 }
 
-void sobel_host(Mat& imgIn Mat& imgOut, double& time){
+void sobel_host(Mat& imgIn, Mat& imgOut, double& time){
 	/*******************************HOST********************************/
 	clock_t tic = clock();
-	sobel(imgIn,imgOut,CV_8UC1,1,0);
+	Sobel(imgIn,imgOut,CV_8UC1,1,0);
   	clock_t toc = clock();
 	time = (double)(toc - tic) / CLOCKS_PER_SEC;
 	/*****************************END HOST******************************/
@@ -157,9 +157,7 @@ int main(int argc, char** argv)
 	else printf(" - | - |\n");
 
 
-//	free(imgIn);
 	free(imgOut_1);
-	free(imgOut_2);
 	free(imgOut_3);
 	free(imgOut_4);
 	
