@@ -62,6 +62,13 @@ void imgConvCPU(unsigned char* imgIn, int row, int col, unsigned int maskWidth, 
 
 }
 
+void checkError(cudaError_t error, std::string type) {
+	if(error != cudaSuccess){
+		printf("Error in %s\n", type.c_str());
+		exit(0);
+	}
+}
+
 void serial_host(unsigned char* imgIn, int row, int col, unsigned int maskWidth, unsigned char* imgOut, char* M, double& time) {
 	/*******************************HOST********************************/
 	clock_t tic = clock();
@@ -78,13 +85,6 @@ void sobel_host(Mat& imgIn, Mat& imgOut, double& time){
   	clock_t toc = clock();
 	time = (double)(toc - tic) / CLOCKS_PER_SEC;
 	/*****************************END HOST******************************/
-}
-
-void checkError(cudaError_t error, std::string type) {
-	if(error != cudaSuccess){
-		printf("Error in %s\n", type.c_str());
-		exit(0);
-	}
 }
 
 void serial_device(unsigned char* imgIn, int row, int col, unsigned int maskWidth, unsigned char* imgOut, char* M, int size, double& time) {
@@ -127,6 +127,32 @@ void serial_device(unsigned char* imgIn, int row, int col, unsigned int maskWidt
 	cudaFree(d_dataRawImage);
 	cudaFree(d_imageOutput);
 	cudaFree(d_M);
+}
+
+void sobel_device(Mat& imgIn, Mat& imgOut, double& time){
+	/*******************************HOST********************************/
+	clock_t tic = clock();
+
+	// Copy the input image from CPU to GPU memory
+	cuda::GpuMat gpuInput = cuda::GpuMat(imgIn);
+
+	// Create the output
+	cv::cuda::GpuMat gpuOutput;
+
+	// gradient y direction
+	Ptr<cv::cuda::Filter> filter =  cv::cuda::createSobelFilter(gpuInput.type(), CV_8UC1, 1, 0);
+	filter->apply(gpuInput, gpuOutput);
+	
+	cv::cuda::abs(gpuOutput, gpuOutput);
+
+	gpuOutput.download(imgOut);
+
+  	clock_t toc = clock();
+	time = (double)(toc - tic) / CLOCKS_PER_SEC;
+	/*****************************END HOST******************************/
+
+	gpuInput.release();
+	gpuOutput.release();
 }
 
 int main(int argc, char** argv)
@@ -182,17 +208,17 @@ int main(int argc, char** argv)
 	imgIn = (unsigned char*)malloc(size);
 	imgOut_1 = (unsigned char*)malloc(sizeGray);
 	imgOut_3 = (unsigned char*)malloc(sizeGray);
-	imgOut_4 = (unsigned char*)malloc(sizeGray);
 
 	imgIn = image.data;	
 
-	Mat result, imgOut_2;
+	Mat result, imgOut_2, imgOut_4;
 	imgOut_2.create(row,col,CV_8UC1);
+	imgOut_4.create(row,col,CV_8UC1);
 
 	if (op[0]) serial_host(imgIn, row, col, maskWidth, imgOut_1, M, CPU);
 	if (op[1]) sobel_host(image, imgOut_2, CPU_CV);
 	if (op[2]) serial_device(imgIn, row, col, maskWidth, imgOut_3, M, sizeGray, GPU);
-	// if (op[3]) sobel_device(A, B, C3, GPU_tiled, size, N);
+	if (op[3]) sobel_device(image, imgOut_4, GPU_CV);
 	
 	result.create(row,col,CV_8UC1);
 
@@ -230,13 +256,13 @@ int main(int argc, char** argv)
 			printf(" %f | %f |\n", GPU_CV, acc3);
 		}
 		else printf(" %f | - |\n", GPU_CV);
+		imwrite("res_GPU_CV.jpg", imgOut_4);
 	}
 	else printf(" - | - |\n");
 
 
 	free(imgOut_1);
 	free(imgOut_3);
-	free(imgOut_4);
 	
 	return 0;
 }
