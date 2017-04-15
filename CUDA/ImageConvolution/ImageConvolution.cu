@@ -133,6 +133,7 @@ void serial_device(unsigned char* imgIn, int row, int col, unsigned int maskWidt
 void sobel_device(Mat& imgIn, Mat& imgOut, double& time){
 	/*******************************GPU********************************/
 	clock_t tic = clock();
+	//gpu::setDevice(0);	
 
 	// Copy the input image from CPU to GPU memory
 	gpu::GpuMat gpuInput = gpu::GpuMat(imgIn);
