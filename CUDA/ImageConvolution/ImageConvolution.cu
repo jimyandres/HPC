@@ -36,10 +36,19 @@ void imgConvCPU(unsigned char* imgIn, int row, int col, unsigned int maskWidth, 
 
 }
 
-void serial_host(unsigned char* imgIn, int row, int col, unsigned int maskWidth, unsigned char* imgOut, char* M, double &time) {
+void serial_host(unsigned char* imgIn, int row, int col, unsigned int maskWidth, unsigned char* imgOut, char* M, double& time) {
 	/*******************************HOST********************************/
 	clock_t tic = clock();
 	imgConvCPU(imgIn,row,col,maskWidth,imgOut,M);
+  	clock_t toc = clock();
+	time = (double)(toc - tic) / CLOCKS_PER_SEC;
+	/*****************************END HOST******************************/
+}
+
+void sobel_host(Mat& imgIn Mat& imgOut, double& time){
+	/*******************************HOST********************************/
+	clock_t tic = clock();
+	sobel(imgIn,imgOut,CV_8UC1,1,0);
   	clock_t toc = clock();
 	time = (double)(toc - tic) / CLOCKS_PER_SEC;
 	/*****************************END HOST******************************/
@@ -49,6 +58,7 @@ int main(int argc, char** argv)
 {
 	char M[] = {-1,0,1,-2,0,2,-1,0,1};
 	unsigned int maskWidth = 3;
+
 	/*
 	imgIn: 		Original img (Gray scaled)
 	imgOut_1:	Sequential convolution on host
@@ -56,7 +66,8 @@ int main(int argc, char** argv)
 	imgOut_3:	Sequential convolution on device
 	imgOut_4:	Sobel on device
 	*/
-	unsigned char *imgIn, *imgOut_1, *imgOut_2, *imgOut_3, *imgOut_4;
+
+	unsigned char *imgIn, *imgOut_1, *imgOut_3, *imgOut_4;
 	double CPU, CPU_CV, GPU, GPU_CV, acc1, acc2, acc3;
 	CPU = CPU_CV = GPU = GPU_CV = acc1 = acc2 = acc3 = 0.0;
 	
@@ -95,20 +106,20 @@ int main(int argc, char** argv)
 
 	imgIn = (unsigned char*)malloc(size);
 	imgOut_1 = (unsigned char*)malloc(sizeGray);
-	imgOut_2 = (unsigned char*)malloc(sizeGray);
 	imgOut_3 = (unsigned char*)malloc(sizeGray);
 	imgOut_4 = (unsigned char*)malloc(sizeGray);
 
 	imgIn = image.data;	
 
+	Mat result, imgOut_2;
+	imgOut_2.create(row,col,CV_8UC1);
+
 	if (op[0]) serial_host(imgIn, row, col, maskWidth, imgOut_1, M, CPU);
-	// if (op[1]) sobel_host(A, B, C2, GPU, size, N);
+	if (op[1]) sobel_host(image, imgOut_2, CPU_CV);
 	// if (op[2]) serial_device(A, B, C3, GPU_tiled, size, N);
 	// if (op[3]) sobel_device(A, B, C3, GPU_tiled, size, N);
 	
-	Mat result;
 	result.create(row,col,CV_8UC1);
-
 
 	if (op[0]) {
 		printf(" %f |", CPU);
@@ -123,6 +134,7 @@ int main(int argc, char** argv)
 			printf(" %f | %f |", CPU_CV, acc1);
 		}
 		else printf(" %f | - |", CPU_CV);
+		imwrite("res_CPU_CV.jpg", imgOut_2);
 	}
 	else printf(" - | - |");
 
