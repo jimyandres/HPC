@@ -13,6 +13,7 @@
 using namespace cv;
 
 // Sequential Code on GPU (CUDA)
+__global__
 void imgConvGPU(unsigned char* imgIn, int row, int col, unsigned int maskWidth, unsigned char* imgOut, char* M) {
 	unsigned int row_d = blockIdx.y*blockDim.y+threadIdx.y;
 	unsigned int col_d = blockIdx.x*blockDim.x+threadIdx.x;
@@ -79,6 +80,13 @@ void sobel_host(Mat& imgIn, Mat& imgOut, double& time){
 	/*****************************END HOST******************************/
 }
 
+void checkError(cudaError_t error, std::string type) {
+	if(error != cudaSuccess){
+		printf("Error in %s\n", type.c_str());
+		exit(0);
+	}
+}
+
 void serial_device(unsigned char* imgIn, int row, int col, unsigned int maskWidth, unsigned char* imgOut, char* M, int size, double& time) {
 	int size_M = sizeof(unsigned char)*9;
 	cudaError_t error = cudaSuccess;
@@ -104,12 +112,12 @@ void serial_device(unsigned char* imgIn, int row, int col, unsigned int maskWidt
 	checkError(error, "cudaMemcpy for d_M (cuda)");
 		
 	dim3 dimBlock(32,32);
-	dim3 dimGrid(ceil(N/float(dimBlock.x)),ceil(N/float(dimBlock.y)));
+	dim3 dimGrid(ceil(col/float(dimBlock.x)),ceil(row/float(dimBlock.y)));
 
 	imgConvGPU<<<dimGrid,dimBlock>>>(d_dataRawImage, row, col, maskWidth, d_imageOutput, d_M);
 	cudaDeviceSynchronize();
 
-	error = cudaMemcpy(d_imageOutput,imgOut,size,cudaMemcpyDeviceToHost);
+	error = cudaMemcpy(imgOut,d_imageOutput,size,cudaMemcpyDeviceToHost);
 	checkError(error, "cudaMemcpy for imgOut (cuda)");
 
 	clock_t toc = clock();
@@ -154,9 +162,9 @@ int main(int argc, char** argv)
 		else if (s == "sobel_h")
 			op[1] = true;
 		else if (s == "seq_d")
-			op[1] = true;
-		else if (s == "sobel_d")
 			op[2] = true;
+		else if (s == "sobel_d")
+			op[3] = true;
 	}
 
 	Mat image;
@@ -183,7 +191,7 @@ int main(int argc, char** argv)
 
 	if (op[0]) serial_host(imgIn, row, col, maskWidth, imgOut_1, M, CPU);
 	if (op[1]) sobel_host(image, imgOut_2, CPU_CV);
-	if (op[2]) serial_device(imgIn, row, col, maskWidth, imgOut_1, M, sizeGray, GPU);
+	if (op[2]) serial_device(imgIn, row, col, maskWidth, imgOut_3, M, sizeGray, GPU);
 	// if (op[3]) sobel_device(A, B, C3, GPU_tiled, size, N);
 	
 	result.create(row,col,CV_8UC1);
@@ -211,6 +219,8 @@ int main(int argc, char** argv)
 			printf(" %f | %f |", GPU, acc2);
 		}
 		else printf(" %f | - |", GPU);
+		result.data = imgOut_3;
+		imwrite("res_GPU.jpg", result);
 	}
 	else printf(" - | - |");
 
