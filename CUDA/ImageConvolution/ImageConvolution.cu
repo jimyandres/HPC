@@ -4,12 +4,37 @@
 #include <cuda.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math_functions.h>
 
 #define RED 2
 #define GREEN 1
 #define BLUE 0
 
 using namespace cv;
+
+// Sequential Code on GPU (CUDA)
+void imgConvGPU(unsigned char* imgIn, int row, int col, unsigned int maskWidth, unsigned char* imgOut, char* M) {
+	unsigned int row_d = blockIdx.y*blockDim.y+threadIdx.y;
+	unsigned int col_d = blockIdx.x*blockDim.x+threadIdx.x;
+
+	int start_r = row_d - (maskWidth/2);
+	int start_c = col_d - (maskWidth/2);
+
+	int Pixel = 0;
+
+	for (int k = 0; k < maskWidth; ++k)
+	{
+		for (int l = 0; l < maskWidth; ++l)
+		{
+			if((k + start_r) >= 0 && (k + start_r) < row && (l + start_c) >= 0 && (l + start_c) < col)
+				Pixel += imgIn[(k + start_r) * col + (l + start_c)] * M[k * maskWidth + l];
+		}
+	}
+
+	Pixel = Pixel < 0 ? 0 : Pixel;
+	Pixel = Pixel > 255 ? 255 : Pixel;
+	imgOut[row_d * col + col_d] = (unsigned char)Pixel;
+}
 
 // Sequential Code on CPU
 void imgConvCPU(unsigned char* imgIn, int row, int col, unsigned int maskWidth, unsigned char* imgOut, char* M) {
@@ -52,6 +77,48 @@ void sobel_host(Mat& imgIn, Mat& imgOut, double& time){
   	clock_t toc = clock();
 	time = (double)(toc - tic) / CLOCKS_PER_SEC;
 	/*****************************END HOST******************************/
+}
+
+void serial_device(unsigned char* imgIn, int row, int col, unsigned int maskWidth, unsigned char* imgOut, char* M, int size, double& time) {
+	int size_M = sizeof(unsigned char)*9;
+	cudaError_t error = cudaSuccess;
+	unsigned char *d_dataRawImage, *d_imageOutput;
+	char* d_M;
+
+	error = cudaMalloc((void**)&d_dataRawImage,size);
+	checkError(error, "cudaMalloc for d_dataRawImage (cuda)");
+
+	error = cudaMalloc((void**)&d_imageOutput,size);
+	checkError(error, "cudaMalloc for d_imageOutput (cuda)");
+
+	error = cudaMalloc((void**)&d_M,size_M);
+	checkError(error, "cudaMalloc for d_M (cuda)");
+
+	/*******************************GPU********************************/
+	clock_t tic = clock();
+
+	error = cudaMemcpy(d_dataRawImage,imgIn,size,cudaMemcpyHostToDevice);
+	checkError(error, "cudaMemcpy for d_dataRawImage (cuda)");
+
+	error = cudaMemcpy(d_M,M,size_M,cudaMemcpyHostToDevice);
+	checkError(error, "cudaMemcpy for d_M (cuda)");
+		
+	dim3 dimBlock(32,32);
+	dim3 dimGrid(ceil(N/float(dimBlock.x)),ceil(N/float(dimBlock.y)));
+
+	imgConvGPU<<<dimGrid,dimBlock>>>(d_dataRawImage, row, col, maskWidth, d_imageOutput, d_M);
+	cudaDeviceSynchronize();
+
+	error = cudaMemcpy(d_imageOutput,imgOut,size,cudaMemcpyDeviceToHost);
+	checkError(error, "cudaMemcpy for imgOut (cuda)");
+
+	clock_t toc = clock();
+	time = (double)(toc - tic) / CLOCKS_PER_SEC;
+	/*****************************GPU END******************************/
+
+	cudaFree(d_dataRawImage);
+	cudaFree(d_imageOutput);
+	cudaFree(d_M);
 }
 
 int main(int argc, char** argv)
@@ -116,7 +183,7 @@ int main(int argc, char** argv)
 
 	if (op[0]) serial_host(imgIn, row, col, maskWidth, imgOut_1, M, CPU);
 	if (op[1]) sobel_host(image, imgOut_2, CPU_CV);
-	// if (op[2]) serial_device(A, B, C3, GPU_tiled, size, N);
+	if (op[2]) serial_device(imgIn, row, col, maskWidth, imgOut_1, M, sizeGray, GPU);
 	// if (op[3]) sobel_device(A, B, C3, GPU_tiled, size, N);
 	
 	result.create(row,col,CV_8UC1);
