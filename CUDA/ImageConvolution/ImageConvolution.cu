@@ -9,29 +9,28 @@
 #define GREEN 1
 #define BLUE 0
 
-// __constant__ char M[MASK_WIDTH*MASK_WIDTH];
+using namespace cv;
 
 // Sequential Code on CPU
 void imgConvCPU(unsigned char* imgIn, int row, int col, unsigned int maskWidth, unsigned char* imgOut, char* M) {
-
-	int start_M = maskWidth/2;
-
 	for (int i = 0; i < row; ++i)
 	{
 		for (int j = 0; j < col; ++j)
 		{
 			int Pixel = 0;
+			int start_r = i - (maskWidth/2);
+			int start_c = j - (maskWidth/2);
 			for (int k = 0; k < maskWidth; ++k)
 			{
 				for (int l = 0; l < maskWidth; ++l)
 				{
-					if((k - start_M) > 0 && (k - start_M) < row && (l - start_M) > 0 && (l - start_M) > col)
-						Pixel += imgIn[(k - start_M) * row + (l - start_M)] * M[k * maskWidth + l];
+					if((k + start_r) >= 0 && (k + start_r) < row && (l + start_c) >= 0 && (l + start_c) < col)
+						Pixel += imgIn[(k + start_r) * col + (l + start_c)] * M[k * maskWidth + l];
 				}
 			}
 			Pixel = Pixel < 0 ? 0 : Pixel;
 			Pixel = Pixel > 255 ? 255 : Pixel;
-			imgOut[i * row + j] = (unsigned char)Pixel;
+			imgOut[i * col + j] = (unsigned char)Pixel;
 		}
 	}
 
@@ -40,15 +39,15 @@ void imgConvCPU(unsigned char* imgIn, int row, int col, unsigned int maskWidth, 
 void serial_host(unsigned char* imgIn, int row, int col, unsigned int maskWidth, unsigned char* imgOut, char* M, double &time) {
 	/*******************************HOST********************************/
 	clock_t tic = clock();
-	matrixMultCPU(A,B,C, N);
+	imgConvCPU(imgIn,row,col,maskWidth,imgOut,M);
   	clock_t toc = clock();
 	time = (double)(toc - tic) / CLOCKS_PER_SEC;
 	/*****************************END HOST******************************/
 }
 
-int main(int argc, char const *argv[])
+int main(int argc, char** argv)
 {
-	char h_M[] = {-1,0,1,-2,0,2,-1,0,1};
+	char M[] = {-1,0,1,-2,0,2,-1,0,1};
 	unsigned int maskWidth = 3;
 	/*
 	imgIn: 		Original img (Gray scaled)
@@ -83,7 +82,7 @@ int main(int argc, char const *argv[])
 	}
 
 	Mat image;
-	image = imread(imageName, 1);
+	image = imread(imageName, CV_LOAD_IMAGE_GRAYSCALE);
 
 
 	// Get image dimension
@@ -91,10 +90,10 @@ int main(int argc, char const *argv[])
 	int col = s.width;
 	int row = s.height;
 	
-	int size = sizeof(unsigned char)*width*height*image.channels();
-    int sizeGray = sizeof(unsigned char)*width*height;
+	int size = sizeof(unsigned char)*row*col;
+	int sizeGray = sizeof(unsigned char)*row*col;
 
-    imgIn = (unsigned char*)malloc(size);
+	imgIn = (unsigned char*)malloc(size);
 	imgOut_1 = (unsigned char*)malloc(sizeGray);
 	imgOut_2 = (unsigned char*)malloc(sizeGray);
 	imgOut_3 = (unsigned char*)malloc(sizeGray);
@@ -106,14 +105,20 @@ int main(int argc, char const *argv[])
 	// if (op[1]) sobel_host(A, B, C2, GPU, size, N);
 	// if (op[2]) serial_device(A, B, C3, GPU_tiled, size, N);
 	// if (op[3]) sobel_device(A, B, C3, GPU_tiled, size, N);
+	
+	Mat result;
+	result.create(row,col,CV_8UC1);
+
 
 	if (op[0]) {
 		printf(" %f |", CPU);
+		result.data = imgOut_1;
+		imwrite("res_CPU.jpg", result);
 	}
 	else printf(" - |");
 
 	if (op[1]) {
-		f (op[0]) {
+		if (op[0]) {
 			acc1 = CPU / CPU_CV;
 			printf(" %f | %f |", CPU_CV, acc1);
 		}
@@ -122,7 +127,7 @@ int main(int argc, char const *argv[])
 	else printf(" - | - |");
 
 	if (op[2]) {
-		f (op[0]) {
+		if (op[0]) {
 			acc2 = CPU / GPU;
 			printf(" %f | %f |", GPU, acc2);
 		}
@@ -131,16 +136,16 @@ int main(int argc, char const *argv[])
 	else printf(" - | - |");
 
 	if (op[3]) {
-		f (op[0]) {
+		if (op[0]) {
 			acc3 = CPU / GPU_CV;
-			printf(" %f | %f |", GPU_CV, acc3);
+			printf(" %f | %f |\n", GPU_CV, acc3);
 		}
-		else printf(" %f | - |", GPU_CV);
+		else printf(" %f | - |\n", GPU_CV);
 	}
-	else printf(" - | - |");
+	else printf(" - | - |\n");
 
 
-	free(imgIn);
+//	free(imgIn);
 	free(imgOut_1);
 	free(imgOut_2);
 	free(imgOut_3);
