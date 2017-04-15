@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math_functions.h>
+#include "opencv2/gpu/gpu.hpp"
 
 #define RED 2
 #define GREEN 1
@@ -130,26 +131,23 @@ void serial_device(unsigned char* imgIn, int row, int col, unsigned int maskWidt
 }
 
 void sobel_device(Mat& imgIn, Mat& imgOut, double& time){
-	/*******************************HOST********************************/
+	/*******************************GPU********************************/
 	clock_t tic = clock();
 
 	// Copy the input image from CPU to GPU memory
-	cuda::GpuMat gpuInput = cuda::GpuMat(imgIn);
+	gpu::GpuMat gpuInput = gpu::GpuMat(imgIn);
 
 	// Create the output
-	cv::cuda::GpuMat gpuOutput;
+	gpu::GpuMat gpuOutput;
 
 	// gradient y direction
-	Ptr<cv::cuda::Filter> filter =  cv::cuda::createSobelFilter(gpuInput.type(), CV_8UC1, 1, 0);
-	filter->apply(gpuInput, gpuOutput);
+	gpu::Sobel(gpuInput, gpuOutput, CV_8UC1, 1, 0);
 	
-	cv::cuda::abs(gpuOutput, gpuOutput);
-
 	gpuOutput.download(imgOut);
 
   	clock_t toc = clock();
 	time = (double)(toc - tic) / CLOCKS_PER_SEC;
-	/*****************************END HOST******************************/
+	/*****************************GPU END******************************/
 
 	gpuInput.release();
 	gpuOutput.release();
@@ -168,7 +166,7 @@ int main(int argc, char** argv)
 	imgOut_4:	Sobel on device
 	*/
 
-	unsigned char *imgIn, *imgOut_1, *imgOut_3, *imgOut_4;
+	unsigned char *imgIn, *imgOut_1, *imgOut_3;
 	double CPU, CPU_CV, GPU, GPU_CV, acc1, acc2, acc3;
 	CPU = CPU_CV = GPU = GPU_CV = acc1 = acc2 = acc3 = 0.0;
 	
