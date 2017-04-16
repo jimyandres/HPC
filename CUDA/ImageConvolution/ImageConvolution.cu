@@ -7,10 +7,6 @@
 #include <math_functions.h>
 #include "opencv2/gpu/gpu.hpp"
 
-#define RED 2
-#define GREEN 1
-#define BLUE 0
-
 using namespace cv;
 
 // Sequential Code on GPU (CUDA)
@@ -33,8 +29,7 @@ void imgConvGPU(unsigned char* imgIn, int row, int col, unsigned int maskWidth, 
 		}
 	}
 
-	Pixel = Pixel < 0 ? 0 : Pixel;
-	Pixel = Pixel > 255 ? 255 : Pixel;
+	Pixel = Pixel < 0 ? 0 : Pixel > 255 ? 255 : Pixel;
 	imgOut[row_d * col + col_d] = (unsigned char)Pixel;
 }
 
@@ -55,8 +50,7 @@ void imgConvCPU(unsigned char* imgIn, int row, int col, unsigned int maskWidth, 
 						Pixel += imgIn[(k + start_r) * col + (l + start_c)] * M[k * maskWidth + l];
 				}
 			}
-			Pixel = Pixel < 0 ? 0 : Pixel;
-			Pixel = Pixel > 255 ? 255 : Pixel;
+			Pixel = Pixel < 0 ? 0 : Pixel > 255 ? 255 : Pixel;
 			imgOut[i * col + j] = (unsigned char)Pixel;
 		}
 	}
