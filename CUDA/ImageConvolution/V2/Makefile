@@ -1,0 +1,11 @@
+CUDAC 	= nvcc
+CFLAGS	= `pkg-config --cflags opencv`
+LIBS	= `pkg-config --libs opencv`
+
+all: ImageConvolution_V2
+
+ImageConvolution:	ImageConvolution_V2.cu
+	$(CUDAC) $(CFLAGS) ImageConvolution_V2.cu $(LIBS) -o ImageConvolution_V2
+
+clean:
+	rm -f ImageConvolution_V2
