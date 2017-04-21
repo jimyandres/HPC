@@ -12,7 +12,7 @@
 using namespace cv;
 
 // Convolution matrix on constant memory
-__constant__ float M[MASK_WIDTH];
+__constant__ char d_M[MASK_WIDTH];
 
 
 // Sequential Code on GPU (CUDA)
@@ -31,7 +31,7 @@ void imgConvGPU(unsigned char* imgIn, int row, int col, unsigned int maskWidth, 
 		for (int l = 0; l < maskWidth; ++l)
 		{
 			if((k + start_r) >= 0 && (k + start_r) < row && (l + start_c) >= 0 && (l + start_c) < col)
-				Pixel += imgIn[(k + start_r) * col + (l + start_c)] * M[k * maskWidth + l];
+				Pixel += imgIn[(k + start_r) * col + (l + start_c)] * d_M[k * maskWidth + l];
 		}
 	}
 
@@ -51,7 +51,7 @@ void parallel_device(unsigned char* imgIn, int row, int col, unsigned int maskWi
 	int size_M = sizeof(unsigned char)*MASK_WIDTH;
 	cudaError_t error = cudaSuccess;
 	unsigned char *d_dataRawImage, *d_imageOutput;
-	char* d_M;
+//	char* d_M;
 
 	error = cudaMalloc((void**)&d_dataRawImage,size);
 	checkError(error, "cudaMalloc for d_dataRawImage (cuda)");
@@ -83,7 +83,7 @@ void parallel_device(unsigned char* imgIn, int row, int col, unsigned int maskWi
 
 	cudaFree(d_dataRawImage);
 	cudaFree(d_imageOutput);
-	cudaFree(d_M);
+//	cudaFree(d_M);
 }
 
 int main(int argc, char** argv)
@@ -145,10 +145,10 @@ int main(int argc, char** argv)
 	imgOut_2.create(row,col,CV_8UC1);
 	imgOut_4.create(row,col,CV_8UC1);
 
-	if (op[0]) serial_host(imgIn, row, col, maskWidth, imgOut_1, M, CPU);
-	if (op[1]) sobel_host(image, imgOut_2, CPU_CV);
-	if (op[2]) serial_device(imgIn, row, col, maskWidth, imgOut_3, M, sizeGray, GPU);
-	if (op[3]) sobel_device(image, imgOut_4, GPU_CV);
+//	if (op[0]) serial_host(imgIn, row, col, maskWidth, imgOut_1, M, CPU);
+//	if (op[1]) sobel_host(image, imgOut_2, CPU_CV);
+	if (op[2]) parallel_device(imgIn, row, col, maskWidth, imgOut_3, M, sizeGray, GPU);
+//	if (op[3]) sobel_device(image, imgOut_4, GPU_CV);
 
 	result.create(row,col,CV_8UC1);
 
