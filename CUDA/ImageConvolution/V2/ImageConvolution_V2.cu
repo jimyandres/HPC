@@ -7,15 +7,39 @@
 #include <math_functions.h>
 #include "opencv2/gpu/gpu.hpp"
 
-#define MASK_WIDTH 9
+#define MASK_SIZE 9
 
 using namespace cv;
 
 // Convolution matrix on constant memory
-__constant__ char d_M[MASK_WIDTH];
+__constant__ char d_M[MASK_SIZE];
 
 
-// Sequential Code on GPU (CUDA)
+// Parallel Code on GPU using Constant Mem for matrix convol (CUDA)
+__global__
+void imgConvGPU(unsigned char* imgIn, int row, int col, unsigned int maskWidth, unsigned char* imgOut) {
+	unsigned int row_d = blockIdx.y*blockDim.y+threadIdx.y;
+	unsigned int col_d = blockIdx.x*blockDim.x+threadIdx.x;
+
+	int start_r = row_d - (maskWidth/2);
+	int start_c = col_d - (maskWidth/2);
+
+	int Pixel = 0;
+
+	for (int k = 0; k < maskWidth; ++k)
+	{
+		for (int l = 0; l < maskWidth; ++l)
+		{
+			if((k + start_r) >= 0 && (k + start_r) < row && (l + start_c) >= 0 && (l + start_c) < col)
+				Pixel += imgIn[(k + start_r) * col + (l + start_c)] * d_M[k * maskWidth + l];
+		}
+	}
+
+	Pixel = Pixel < 0 ? 0 : Pixel > 255 ? 255 : Pixel;
+	imgOut[row_d * col + col_d] = (unsigned char)Pixel;
+}
+
+// Parallel Code on GPU using shared Mem (CUDA)
 __global__
 void imgConvGPU(unsigned char* imgIn, int row, int col, unsigned int maskWidth, unsigned char* imgOut) {
 	unsigned int row_d = blockIdx.y*blockDim.y+threadIdx.y;
@@ -47,11 +71,10 @@ void checkError(cudaError_t error, std::string type) {
 }
 
 
-void parallel_device(unsigned char* imgIn, int row, int col, unsigned int maskWidth, unsigned char* imgOut, char* M, int size, double& time) {
-	int size_M = sizeof(unsigned char)*MASK_WIDTH;
+void cuda_const(unsigned char* imgIn, int row, int col, unsigned int maskWidth, unsigned char* imgOut, char* M, int size, double& time) {
+	int size_M = sizeof(unsigned char)*MASK_SIZE;
 	cudaError_t error = cudaSuccess;
 	unsigned char *d_dataRawImage, *d_imageOutput;
-//	char* d_M;
 
 	error = cudaMalloc((void**)&d_dataRawImage,size);
 	checkError(error, "cudaMalloc for d_dataRawImage (cuda)");
@@ -83,7 +106,43 @@ void parallel_device(unsigned char* imgIn, int row, int col, unsigned int maskWi
 
 	cudaFree(d_dataRawImage);
 	cudaFree(d_imageOutput);
-//	cudaFree(d_M);
+}
+
+void cuda_sm(unsigned char* imgIn, int row, int col, unsigned int maskWidth, unsigned char* imgOut, char* M, int size, double& time) {
+	int size_M = sizeof(unsigned char)*MASK_SIZE;
+	cudaError_t error = cudaSuccess;
+	unsigned char *d_dataRawImage, *d_imageOutput;
+
+	error = cudaMalloc((void**)&d_dataRawImage,size);
+	checkError(error, "cudaMalloc for d_dataRawImage (cuda)");
+
+	error = cudaMalloc((void**)&d_imageOutput,size);
+	checkError(error, "cudaMalloc for d_imageOutput (cuda)");
+
+	/*******************************GPU********************************/
+	clock_t tic = clock();
+
+	error = cudaMemcpy(d_dataRawImage,imgIn,size,cudaMemcpyHostToDevice);
+	checkError(error, "cudaMemcpy for d_dataRawImage (cuda)");
+
+	error = cudaMemcpyToSymbol(d_M, M, size_M);
+	checkError(error, "cudaMemcpyToSymbol for d_M (cuda)");
+
+	dim3 dimBlock(32,32);
+	dim3 dimGrid(ceil(col/float(dimBlock.x)),ceil(row/float(dimBlock.y)));
+
+	imgConvGPU<<<dimGrid,dimBlock>>>(d_dataRawImage, row, col, maskWidth, d_imageOutput);
+	cudaDeviceSynchronize();
+
+	error = cudaMemcpy(imgOut,d_imageOutput,size,cudaMemcpyDeviceToHost);
+	checkError(error, "cudaMemcpy for imgOut (cuda)");
+
+	clock_t toc = clock();
+	time = (double)(toc - tic) / CLOCKS_PER_SEC;
+	/*****************************GPU END******************************/
+
+	cudaFree(d_dataRawImage);
+	cudaFree(d_imageOutput);
 }
 
 int main(int argc, char** argv)
@@ -114,9 +173,9 @@ int main(int argc, char** argv)
 
 	for (int i = 2; i < argc; i++) {
 		std::string s = argv[i];
-		if (s == "seq_h")
+		if (s == "cc")
 			op[0] = true;
-		else if (s == "sobel_h")
+		else if (s == "cs")
 			op[1] = true;
 		else if (s == "pd")
 			op[2] = true;
@@ -145,10 +204,10 @@ int main(int argc, char** argv)
 	imgOut_2.create(row,col,CV_8UC1);
 	imgOut_4.create(row,col,CV_8UC1);
 
-//	if (op[0]) serial_host(imgIn, row, col, maskWidth, imgOut_1, M, CPU);
-//	if (op[1]) sobel_host(image, imgOut_2, CPU_CV);
-	if (op[2]) parallel_device(imgIn, row, col, maskWidth, imgOut_3, M, sizeGray, GPU);
-//	if (op[3]) sobel_device(image, imgOut_4, GPU_CV);
+	if (op[0]) cuda_const(imgIn, row, col, maskWidth, imgOut_1, M, CPU);
+	if (op[1]) cuda_sm(image, imgOut_2, CPU_CV);
+	// if (op[2]) parallel_device(imgIn, row, col, maskWidth, imgOut_3, M, sizeGray, GPU);
+	// if (op[3]) sobel_device(image, imgOut_4, GPU_CV);
 
 	result.create(row,col,CV_8UC1);
 
