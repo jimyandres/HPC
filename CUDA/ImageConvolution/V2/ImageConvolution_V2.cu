@@ -19,7 +19,7 @@ __constant__ char d_M[MASK_SIZE];
 
 // Parallel Code on GPU using Constant Mem for matrix convol (CUDA)
 __global__
-void imgConvGPU(unsigned char* imgIn, int row, int col, /*unsigned int maskWidth,*/ unsigned char* imgOut) {
+void imgConvGPU(unsigned char* imgIn, int row, int col, unsigned char* imgOut) {
 	unsigned int row_d = blockIdx.y*blockDim.y+threadIdx.y;
 	unsigned int col_d = blockIdx.x*blockDim.x+threadIdx.x;
 
@@ -38,14 +38,16 @@ void imgConvGPU(unsigned char* imgIn, int row, int col, /*unsigned int maskWidth
 	}
 
 	Pixel = Pixel < 0 ? 0 : Pixel > 255 ? 255 : Pixel;
-	imgOut[row_d * col + col_d] = (unsigned char)Pixel;
+	if (row_d < row && col_d < col)
+		imgOut[row_d * col + col_d] = (unsigned char)Pixel;
 }
 
 // Parallel Code on GPU using shared Mem (CUDA)
 __global__
-void imgConvGPU_sharedMem(unsigned char* imgIn, int row, int col, /*unsigned int maskWidth,*/ unsigned char* imgOut) {
+void imgConvGPU_sharedMem(unsigned char* imgIn, int row, int col, unsigned char* imgOut) {
 
-	int dest, destX, destY, src, srcX, srcY, size_T = TILE_WIDTH + TILE_WIDTH - 1;
+	int dest, destX, destY, src, srcX, srcY;
+	const int size_T = TILE_WIDTH + TILE_WIDTH - 1;	
 
 	unsigned int row_d = blockIdx.y*blockDim.y+threadIdx.y;
 	unsigned int col_d = blockIdx.x*blockDim.x+threadIdx.x;
@@ -92,45 +94,46 @@ void imgConvGPU_sharedMem(unsigned char* imgIn, int row, int col, /*unsigned int
 	}
 
 	Pixel = Pixel < 0 ? 0 : Pixel > 255 ? 255 : Pixel;
-	imgOut[row_d * col + col_d] = (unsigned char)Pixel;
+	if (row_d < row && col_d < col)
+		imgOut[row_d * col + col_d] = (unsigned char)Pixel;
 }
 
 void checkError(cudaError_t error, std::string type) {
 	if(error != cudaSuccess){
-		printf("Error in %s\n", type.c_str());
+		printf("Error in %s, %s\n", type.c_str(), cudaGetErrorString(error));
 		exit(0);
 	}
 }
 
 
 void cuda_const(unsigned char* imgIn, int row, int col, unsigned int maskWidth, unsigned char* imgOut, char* M, int size, double& time) {
-	int size_M = sizeof(unsigned char)*MASK_SIZE;
+	int size_M = sizeof(char)*MASK_SIZE;
 	cudaError_t error = cudaSuccess;
 	unsigned char *d_dataRawImage, *d_imageOutput;
 
 	error = cudaMalloc((void**)&d_dataRawImage,size);
-	checkError(error, "cudaMalloc for d_dataRawImage (cuda)");
+	checkError(error, "cudaMalloc for d_dataRawImage (w/ const mem)");
 
 	error = cudaMalloc((void**)&d_imageOutput,size);
-	checkError(error, "cudaMalloc for d_imageOutput (cuda)");
+	checkError(error, "cudaMalloc for d_imageOutput (w/ const mem)");
 
 	/*******************************GPU********************************/
 	clock_t tic = clock();
 
 	error = cudaMemcpy(d_dataRawImage,imgIn,size,cudaMemcpyHostToDevice);
-	checkError(error, "cudaMemcpy for d_dataRawImage (cuda)");
+	checkError(error, "cudaMemcpy for d_dataRawImage (w/ const mem)");
 
 	error = cudaMemcpyToSymbol(d_M, M, size_M);
-	checkError(error, "cudaMemcpyToSymbol for d_M (cuda)");
+	checkError(error, "cudaMemcpyToSymbol for d_M (w/ const mem)");
 
-	dim3 dimBlock(32,32);
-	dim3 dimGrid(ceil(col/float(dimBlock.x)),ceil(row/float(dimBlock.y)));
+	dim3 dimBlock(32,32,1);
+	dim3 dimGrid(ceil(col/float(dimBlock.x)),ceil(row/float(dimBlock.y)),1);
 
-	imgConvGPU<<<dimGrid,dimBlock>>>(d_dataRawImage, row, col, maskWidth, d_imageOutput);
+	imgConvGPU<<<dimGrid,dimBlock>>>(d_dataRawImage, row, col, d_imageOutput);
 	cudaDeviceSynchronize();
 
 	error = cudaMemcpy(imgOut,d_imageOutput,size,cudaMemcpyDeviceToHost);
-	checkError(error, "cudaMemcpy for imgOut (cuda)");
+	checkError(error, "cudaMemcpy for imgOut (w/ const mem)");
 
 	clock_t toc = clock();
 	time = (double)(toc - tic) / CLOCKS_PER_SEC;
@@ -141,33 +144,33 @@ void cuda_const(unsigned char* imgIn, int row, int col, unsigned int maskWidth, 
 }
 
 void cuda_sm(unsigned char* imgIn, int row, int col, unsigned int maskWidth, unsigned char* imgOut, char* M, int size, double& time) {
-	int size_M = sizeof(unsigned char)*MASK_SIZE;
+	int size_M = sizeof(char)*MASK_SIZE;
 	cudaError_t error = cudaSuccess;
 	unsigned char *d_dataRawImage, *d_imageOutput;
 
 	error = cudaMalloc((void**)&d_dataRawImage,size);
-	checkError(error, "cudaMalloc for d_dataRawImage (cuda)");
+	checkError(error, "cudaMalloc for d_dataRawImage (w/ const and shared mem))");
 
 	error = cudaMalloc((void**)&d_imageOutput,size);
-	checkError(error, "cudaMalloc for d_imageOutput (cuda)");
+	checkError(error, "cudaMalloc for d_imageOutput (w/ const and shared mem)");
 
 	/*******************************GPU********************************/
 	clock_t tic = clock();
 
 	error = cudaMemcpy(d_dataRawImage,imgIn,size,cudaMemcpyHostToDevice);
-	checkError(error, "cudaMemcpy for d_dataRawImage (cuda)");
+	checkError(error, "cudaMemcpy for d_dataRawImage (w/ const and shared mem)");
 
 	error = cudaMemcpyToSymbol(d_M, M, size_M);
-	checkError(error, "cudaMemcpyToSymbol for d_M (cuda)");
+	checkError(error, "cudaMemcpyToSymbol for d_M (w/ const and shared mem)");
 
 	dim3 dimBlock(TILE_WIDTH,TILE_WIDTH);
 	dim3 dimGrid(ceil(col/float(dimBlock.x)),ceil(row/float(dimBlock.y)));
 
-	imgConvGPU_sharedMem<<<dimGrid,dimBlock>>>(d_dataRawImage, row, col, maskWidth, d_imageOutput);
+	imgConvGPU_sharedMem<<<dimGrid,dimBlock>>>(d_dataRawImage, row, col, d_imageOutput);
 	cudaDeviceSynchronize();
 
 	error = cudaMemcpy(imgOut,d_imageOutput,size,cudaMemcpyDeviceToHost);
-	checkError(error, "cudaMemcpy for imgOut (cuda)");
+	checkError(error, "cudaMemcpy for imgOut (w/ const and shared mem)");
 
 	clock_t toc = clock();
 	time = (double)(toc - tic) / CLOCKS_PER_SEC;
@@ -184,7 +187,7 @@ int main(int argc, char** argv)
 
 	/*
 	imgIn: 		Original img (Gray scaled)
-	imgOut_1:	Parallel w/ consntant mem
+	imgOut_1:	Parallel w/ constant mem
 	imgOut_2:	Parallel w/ constant and shared mem
 	imgOut_3:	
 	imgOut_4:	
@@ -228,6 +231,7 @@ int main(int argc, char** argv)
 
 	imgIn = (unsigned char*)malloc(size);
 	imgOut_1 = (unsigned char*)malloc(sizeGray);
+	imgOut_2 = (unsigned char*)malloc(sizeGray);
 	imgOut_3 = (unsigned char*)malloc(sizeGray);
 
 	imgIn = image.data;
@@ -235,8 +239,8 @@ int main(int argc, char** argv)
 	Mat result, imgOut_4;
 	imgOut_4.create(row,col,CV_8UC1);
 
-	if (op[0]) cuda_const(imgIn, row, col, maskWidth, imgOut_1, M, GPU_C);
-	if (op[1]) cuda_sm(imgIn, row, col, maskWidth, imgOut_1, M, GPU_CS);
+	if (op[0]) cuda_const(imgIn, row, col, maskWidth, imgOut_1, M, sizeGray, GPU_C);
+	if (op[1]) cuda_sm(imgIn, row, col, maskWidth, imgOut_2, M, sizeGray, GPU_CS);
 	// if (op[2]) parallel_device(imgIn, row, col, maskWidth, imgOut_3, M, sizeGray, GPU);
 	// if (op[3]) sobel_device(image, imgOut_4, GPU_CV);
 
@@ -255,7 +259,8 @@ int main(int argc, char** argv)
 			printf(" %f | %f |", GPU_CS, acc1);
 		}
 		else printf(" %f | - |", GPU_CS);
-		imwrite("res_GPU_CS.jpg", imgOut_2);
+		result.data = imgOut_2;
+		imwrite("res_GPU_CS.jpg", result);
 	}
 	else printf(" - | - |");
 
