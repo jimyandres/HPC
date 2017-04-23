@@ -8,7 +8,7 @@
 #SBATCH --gres=gpu:1
 
 
-declare -a array=("test2.png" "test1.png" "test3.jpg")
+declare -a array=("../test2.png" "../test1.png" "../test3.jpg")
 
 for i in "${array[@]}"
 do
@@ -18,7 +18,7 @@ do
 	echo "| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |"
 	for (( j = 1; j <= 20; j++ )); do
 		echo -n "| $j | "
-		srun 2_ImageConvolution $i seq_h sobel_h seq_d sobel_d 
+		srun 2_ImageConvolution $i cconst csha seq_d sobel_d 
 	done
 	echo
 done

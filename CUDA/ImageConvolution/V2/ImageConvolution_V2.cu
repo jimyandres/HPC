@@ -8,6 +8,8 @@
 #include "opencv2/gpu/gpu.hpp"
 
 #define MASK_SIZE 9
+#define MASK_WIDTH 3
+#define TILE_WIDTH 32
 
 using namespace cv;
 
@@ -17,21 +19,21 @@ __constant__ char d_M[MASK_SIZE];
 
 // Parallel Code on GPU using Constant Mem for matrix convol (CUDA)
 __global__
-void imgConvGPU(unsigned char* imgIn, int row, int col, unsigned int maskWidth, unsigned char* imgOut) {
+void imgConvGPU(unsigned char* imgIn, int row, int col, /*unsigned int maskWidth,*/ unsigned char* imgOut) {
 	unsigned int row_d = blockIdx.y*blockDim.y+threadIdx.y;
 	unsigned int col_d = blockIdx.x*blockDim.x+threadIdx.x;
 
-	int start_r = row_d - (maskWidth/2);
-	int start_c = col_d - (maskWidth/2);
+	int start_r = row_d - (MASK_WIDTH/2);
+	int start_c = col_d - (MASK_WIDTH/2);
 
 	int Pixel = 0;
 
-	for (int k = 0; k < maskWidth; ++k)
+	for (int k = 0; k < MASK_WIDTH; ++k)
 	{
-		for (int l = 0; l < maskWidth; ++l)
+		for (int l = 0; l < MASK_WIDTH; ++l)
 		{
 			if((k + start_r) >= 0 && (k + start_r) < row && (l + start_c) >= 0 && (l + start_c) < col)
-				Pixel += imgIn[(k + start_r) * col + (l + start_c)] * d_M[k * maskWidth + l];
+				Pixel += imgIn[(k + start_r) * col + (l + start_c)] * d_M[k * MASK_WIDTH + l];
 		}
 	}
 
@@ -41,21 +43,51 @@ void imgConvGPU(unsigned char* imgIn, int row, int col, unsigned int maskWidth, 
 
 // Parallel Code on GPU using shared Mem (CUDA)
 __global__
-void imgConvGPU(unsigned char* imgIn, int row, int col, unsigned int maskWidth, unsigned char* imgOut) {
+void imgConvGPU_sharedMem(unsigned char* imgIn, int row, int col, /*unsigned int maskWidth,*/ unsigned char* imgOut) {
+
+	int dest, destX, destY, src, srcX, srcY, size_T = TILE_WIDTH + TILE_WIDTH - 1;
+
 	unsigned int row_d = blockIdx.y*blockDim.y+threadIdx.y;
 	unsigned int col_d = blockIdx.x*blockDim.x+threadIdx.x;
 
-	int start_r = row_d - (maskWidth/2);
-	int start_c = col_d - (maskWidth/2);
+
+	__shared__ char d_T[size_T][size_T];
+
+	int n = MASK_WIDTH/2;
+
+	dest = threadIdx.y * TILE_WIDTH + threadIdx.x;
+	destY = dest / size_T;
+	destX = dest % size_T;
+	srcY = blockIdx.y * TILE_WIDTH + destY - n;
+	srcX = blockIdx.x * TILE_WIDTH + destX - n;
+	src = srcY * col + srcX;
+	if (srcY >= 0 && srcY < row && srcX >= 0 && srcX < col)
+		d_T[destY][destX] = imgIn[src];
+	else
+		d_T[destY][destX] = 0;
+
+	dest = threadIdx.y * TILE_WIDTH + threadIdx.x + TILE_WIDTH * TILE_WIDTH;
+	destY = dest / size_T;
+	destX = dest % size_T;
+	srcY = blockIdx.y * TILE_WIDTH + destY - n;
+	srcX = blockIdx.x * TILE_WIDTH + destX - n;
+	src = srcY * col + srcX;
+
+	if (destY < size_T)
+		if (srcY >= 0 && srcY < row && srcX >= 0 && srcX < col)
+			d_T[destY][destX] = imgIn[src];
+		else
+			d_T[destY][destX] = 0;
+
+	__syncthreads();
 
 	int Pixel = 0;
 
-	for (int k = 0; k < maskWidth; ++k)
+	for (int k = 0; k < MASK_WIDTH; ++k)
 	{
-		for (int l = 0; l < maskWidth; ++l)
+		for (int l = 0; l < MASK_WIDTH; ++l)
 		{
-			if((k + start_r) >= 0 && (k + start_r) < row && (l + start_c) >= 0 && (l + start_c) < col)
-				Pixel += imgIn[(k + start_r) * col + (l + start_c)] * d_M[k * maskWidth + l];
+			Pixel += d_T[threadIdx.y + k][threadIdx.x + l] * d_M[k * MASK_WIDTH + l];
 		}
 	}
 
@@ -128,10 +160,10 @@ void cuda_sm(unsigned char* imgIn, int row, int col, unsigned int maskWidth, uns
 	error = cudaMemcpyToSymbol(d_M, M, size_M);
 	checkError(error, "cudaMemcpyToSymbol for d_M (cuda)");
 
-	dim3 dimBlock(32,32);
+	dim3 dimBlock(TILE_WIDTH,TILE_WIDTH);
 	dim3 dimGrid(ceil(col/float(dimBlock.x)),ceil(row/float(dimBlock.y)));
 
-	imgConvGPU<<<dimGrid,dimBlock>>>(d_dataRawImage, row, col, maskWidth, d_imageOutput);
+	imgConvGPU_sharedMem<<<dimGrid,dimBlock>>>(d_dataRawImage, row, col, maskWidth, d_imageOutput);
 	cudaDeviceSynchronize();
 
 	error = cudaMemcpy(imgOut,d_imageOutput,size,cudaMemcpyDeviceToHost);
@@ -152,17 +184,17 @@ int main(int argc, char** argv)
 
 	/*
 	imgIn: 		Original img (Gray scaled)
-	imgOut_1:	Sequential convolution on host
-	imgOut_2:	Sobel on host
-	imgOut_3:	Sequential convolution on device
-	imgOut_4:	Sobel on device
+	imgOut_1:	Parallel w/ consntant mem
+	imgOut_2:	Parallel w/ constant and shared mem
+	imgOut_3:	
+	imgOut_4:	
 	*/
 
-	unsigned char *imgIn, *imgOut_1, *imgOut_3;
-	double CPU, CPU_CV, GPU, GPU_CV, acc1, acc2, acc3;
-	CPU = CPU_CV = GPU = GPU_CV = acc1 = acc2 = acc3 = 0.0;
+	unsigned char *imgIn, *imgOut_1, *imgOut_2, *imgOut_3;
+	double GPU_C, GPU_CS, GPU, GPU_CV, acc1, acc2, acc3;
+	GPU_C = GPU_CS = GPU = GPU_CV = acc1 = acc2 = acc3 = 0.0;
 
-	// Meaning of  positions: {CPU, CPU_CV, GPU, GPU_CV}
+	// Meaning of  positions: {GPU_C, GPU_CS, GPU, GPU_CV}
 	bool op[] = {false, false, false, false};
 
 	if(argc < 2) {
@@ -173,9 +205,9 @@ int main(int argc, char** argv)
 
 	for (int i = 2; i < argc; i++) {
 		std::string s = argv[i];
-		if (s == "cc")
+		if (s == "cconst")
 			op[0] = true;
-		else if (s == "cs")
+		else if (s == "csha")
 			op[1] = true;
 		else if (s == "pd")
 			op[2] = true;
@@ -200,37 +232,36 @@ int main(int argc, char** argv)
 
 	imgIn = image.data;
 
-	Mat result, imgOut_2, imgOut_4;
-	imgOut_2.create(row,col,CV_8UC1);
+	Mat result, imgOut_4;
 	imgOut_4.create(row,col,CV_8UC1);
 
-	if (op[0]) cuda_const(imgIn, row, col, maskWidth, imgOut_1, M, CPU);
-	if (op[1]) cuda_sm(image, imgOut_2, CPU_CV);
+	if (op[0]) cuda_const(imgIn, row, col, maskWidth, imgOut_1, M, GPU_C);
+	if (op[1]) cuda_sm(imgIn, row, col, maskWidth, imgOut_1, M, GPU_CS);
 	// if (op[2]) parallel_device(imgIn, row, col, maskWidth, imgOut_3, M, sizeGray, GPU);
 	// if (op[3]) sobel_device(image, imgOut_4, GPU_CV);
 
 	result.create(row,col,CV_8UC1);
 
 	if (op[0]) {
-		printf(" %f |", CPU);
+		printf(" %f |", GPU_C);
 		result.data = imgOut_1;
-		imwrite("res_CPU.jpg", result);
+		imwrite("res_GPU_C.jpg", result);
 	}
 	else printf(" - |");
 
 	if (op[1]) {
 		if (op[0]) {
-			acc1 = CPU / CPU_CV;
-			printf(" %f | %f |", CPU_CV, acc1);
+			acc1 = GPU_C / GPU_CS;
+			printf(" %f | %f |", GPU_CS, acc1);
 		}
-		else printf(" %f | - |", CPU_CV);
-		imwrite("res_CPU_CV.jpg", imgOut_2);
+		else printf(" %f | - |", GPU_CS);
+		imwrite("res_GPU_CS.jpg", imgOut_2);
 	}
 	else printf(" - | - |");
 
 	if (op[2]) {
 		if (op[0]) {
-			acc2 = CPU / GPU;
+			acc2 = GPU_C / GPU;
 			printf(" %f | %f |", GPU, acc2);
 		}
 		else printf(" %f | - |", GPU);
@@ -241,7 +272,7 @@ int main(int argc, char** argv)
 
 	if (op[3]) {
 		if (op[0]) {
-			acc3 = CPU / GPU_CV;
+			acc3 = GPU_C / GPU_CV;
 			printf(" %f | %f |\n", GPU_CV, acc3);
 		}
 		else printf(" %f | - |\n", GPU_CV);
