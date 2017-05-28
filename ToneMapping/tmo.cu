@@ -202,9 +202,9 @@ int main(int argc, char** argv)
 
 //	printf("%s\n", image_name);
     hdr = imread(image_name, -1);
-    if(argc !=6 || !hdr.data) {
+    if(argc !=7 || !hdr.data) {
         printf("No image Data \n");
-        printf("Usage: ./test <file_path> <world_lum> <max_lum> <q> <k> <image_out_name>");
+        printf("Usage: ./test <file_path> <world_lum> <max_lum> <q> <k> <image_out_name>\n");
         return -1;
     }
 
