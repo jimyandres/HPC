@@ -83,7 +83,7 @@ __device__ float4 convert_pixel_to_hsl(float4 pixel) {
 __device__ float4 convert_pixel_to_rgb(float4 pixel) {
     float r, g, b;
     float h, s, l;
-    float c, x, hi;
+    float c, x, hi, m;
 
     h = pixel.x;
     s = pixel.y;
