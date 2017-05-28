@@ -46,7 +46,7 @@ void checkError(cudaError_t err) {
 //Convert a pixel RGB to HSL (Hue Saturation Lightness)
 __device__ float4 convert_pixel_to_hsl(float4 pixel) {
     float r, g, b, a;
-    float h, s, v;
+    float h, s, l, v;
 
     r = pixel.x / 255.0f;
     g = pixel.y / 255.0f;
@@ -83,7 +83,7 @@ __device__ float4 convert_pixel_to_hsl(float4 pixel) {
 __device__ float4 convert_pixel_to_rgb(float4 pixel) {
     float r, g, b;
     float h, s, l;
-    float c, x;
+    float c, x, hi;
 
     h = pixel.x;
     s = pixel.y;
@@ -132,7 +132,7 @@ __device__ float log_mapping(float world_lum, float max_lum, float q, float k, f
     float a, b, lum_d;
     a = 1 + q * world_lum;
     b = 1 + k * max_lum;
-    float lum_d = log10f(a)/log10f(b);
+    lum_d = log10f(a)/log10f(b);
 
     return lum_d;
 }
@@ -140,7 +140,7 @@ __device__ float log_mapping(float world_lum, float max_lum, float q, float k, f
 __global__ void tmo(float* imageIn, float* imageOut, int width, int height, float world_lum,
                     float max_lum, float q, float k)
 {
-    float p_red, p_green, p_blue, world_lum, max_lum, q, k;
+    float p_red, p_green, p_blue;
     float4 pixel_hsl, pixel_rgb;
 
     int Row = blockDim.y * blockIdx.y + threadIdx.y;
@@ -261,6 +261,11 @@ int main(int argc, char** argv)
 
     ty =  type2str( ldr.type() );
 //    printf("Image result: %s %dx%d \n", ty.c_str(), ldr.cols, ldr.rows );
+
+    if(show_flag) {
+        showImage(ldr, "Image out LDR");
+        waitKey(0);
+    }
 
     free(h_ImageOut); cudaFree(d_ImageData); cudaFree(d_ImageOut);
 
