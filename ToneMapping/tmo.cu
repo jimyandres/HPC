@@ -153,19 +153,21 @@ __global__ void tmo(float* imageIn, float* imageOut, int width, int height, floa
 
         pixel_hsl = convert_pixel_to_hsl(make_float4(p_red, p_green, p_blue, 0.0));
 
-        //pixel_hsl.z = log_mapping(world_lum, max_lum, q, k, pixel_hsl.z);
-	pixel_hsl.z += 0.01;
+        pixel_hsl.z = log_mapping(world_lum, max_lum, q, k, pixel_hsl.z);
+        pixel_hsl.y = log_mapping(world_lum, max_lum, q, k, pixel_hsl.y);
+        pixel_hsl.x = log_mapping(world_lum, max_lum, q, k, pixel_hsl.x);
+//	    pixel_hsl.z += 0.01;
 
-//        pixel_rgb = convert_pixel_to_rgb(pixel_hsl);
+        pixel_rgb = convert_pixel_to_rgb(pixel_hsl);
 
-        imageOut[(Row*width+Col)*3+BLUE] = log_mapping(world_lum, max_lum, q, k, p_blue);
-        imageOut[(Row*width+Col)*3+GREEN] = log_mapping(world_lum, max_lum, q, k, p_green);
-        imageOut[(Row*width+Col)*3+RED] = log_mapping(world_lum, max_lum, q, k, p_red);
+//        imageOut[(Row*width+Col)*3+BLUE] = log_mapping(world_lum, max_lum, q, k, p_blue);
+//        imageOut[(Row*width+Col)*3+GREEN] = log_mapping(world_lum, max_lum, q, k, p_green);
+//        imageOut[(Row*width+Col)*3+RED] = log_mapping(world_lum, max_lum, q, k, p_red);
 
 
-//	imageOut[(Row*width+Col)*3+BLUE] = pixel_rgb.z;
-//	imageOut[(Row*width+Col)*3+GREEN] = pixel_rgb.y;
-//	imageOut[(Row*width+Col)*3+RED] = pixel_rgb.x;
+        imageOut[(Row*width+Col)*3+BLUE] = pixel_rgb.z;
+        imageOut[(Row*width+Col)*3+GREEN] = pixel_rgb.y;
+        imageOut[(Row*width+Col)*3+RED] = pixel_rgb.x;
     }
 }
 
