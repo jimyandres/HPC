@@ -47,10 +47,10 @@ void checkError(cudaError_t err) {
 __device__ float4 convert_pixel_to_hsl(float4 pixel) {
     float r, g, b, a;
     float h, s, l, v;
-
-    r = pixel.x / powf(2,8);
-    g = pixel.y / powf(2,8);
-    b = pixel.z / powf(2,8);
+    float bits = powf(2,8)-1;
+    r = pixel.x / bits;
+    g = pixel.y / bits;
+    b = pixel.z / bits;
     a = pixel.w;
 
     float max = fmax(r, fmax(g, b));
@@ -58,7 +58,8 @@ __device__ float4 convert_pixel_to_hsl(float4 pixel) {
     float diff = max - min;
 
     v = max;
-    l = diff/2;
+//    l = diff/(powf(2,1)-1);
+    l = 0.299*r + 0.587*g + 0.114*b;
 
     if(v == 0.0f) // black
         h = s = 0.0f;
@@ -91,9 +92,10 @@ __device__ float4 convert_pixel_to_rgb(float4 pixel) {
 
     hi = h/60.0f;
 
-    c = (1 - fabsf(2*l -1)) * s;
+//    c = (1 - fabsf(2*l -1)) * s;
+    c = (1 - fabsf(l*(powf(2,1)-1) -1)) * s;
     x = c * (1 - fabsf(fmodf(hi, 2) - 1));
-    m = (l - c)/2;
+    m = (l - c/2);
 
     if(h >= 0.0f && h < 60.0f) {
         r = c;
@@ -130,7 +132,7 @@ __device__ float4 convert_pixel_to_rgb(float4 pixel) {
 
 __device__ float log_mapping(float world_lum, float max_lum, float q, float k, float lum) {
     float a, b, lum_d;
-    a = 1 + q * world_lum;
+    a = 1 + q * lum;
     b = 1 + k * max_lum;
     lum_d = log10f(a)/log10f(b);
 
@@ -154,8 +156,8 @@ __global__ void tmo(float* imageIn, float* imageOut, int width, int height, floa
         pixel_hsl = convert_pixel_to_hsl(make_float4(p_red, p_green, p_blue, 0.0));
 
         pixel_hsl.z = log_mapping(world_lum, max_lum, q, k, pixel_hsl.z);
-        pixel_hsl.y = log_mapping(world_lum, max_lum, q, k, pixel_hsl.y);
-        pixel_hsl.x = log_mapping(world_lum, max_lum, q, k, pixel_hsl.x);
+//        pixel_hsl.y = log_mapping(world_lum, max_lum, q, k, pixel_hsl.y);
+//        pixel_hsl.x = log_mapping(world_lum, max_lum, q, k, pixel_hsl.x);
 //	    pixel_hsl.z += 0.01;
 
         pixel_rgb = convert_pixel_to_rgb(pixel_hsl);
