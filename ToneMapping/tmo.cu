@@ -102,7 +102,7 @@ __global__ void tonemap_adaptive(float* imageIn, float* imageOut, int width, int
         B = imageIn[(Row*width+Col)*3+BLUE];
 
         L = 0.2126 * R + 0.7152 * G + 0.0722 * B;
-        nl = adaptive_mapping(k, q, L);
+        nL = adaptive_mapping(k, q, L);
         scale = nL / L;
 
         R *= scale;

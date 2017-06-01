@@ -1,3 +1,6 @@
 mpi_vector_add
 mpi_matrix_mult
 test
+*.jpg
+*.exr
+*.out
