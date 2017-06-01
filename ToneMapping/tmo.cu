@@ -13,6 +13,9 @@
 
 using namespace cv;
 
+
+__device__ float maxLum = 0;
+
 std::string type2str(int type) {
     std::string r;
 
@@ -43,145 +46,99 @@ void checkError(cudaError_t err) {
     }
 }
 
-//Convert a pixel RGB to HSL (Hue Saturation Lightness)
-__device__ float4 convert_pixel_to_hsl(float4 pixel) {
-    float r, g, b, a;
-    float h, s, l, v;
-    float bits = powf(2,8)-1;
-    r = pixel.x / bits;
-    g = pixel.y / bits;
-    b = pixel.z / bits;
-    a = pixel.w;
 
-    float max = fmax(r, fmax(g, b));
-    float min = fmin(r, fmin(g, b));
-    float diff = max - min;
+__device__ float logarithmic_mapping(float k, float q, float val_pixel){
+    return (log10(1 + q * val_pixel))/(log10(1 + k * maxLum));
+}
 
-    v = max;
-//    l = diff/(powf(2,1)-1);
-    l = 0.299*r + 0.587*g + 0.114*b;
+__device__ float adaptive_mapping(float k, float q, float val_pixel){
+    return 	(k*log(1 + val_pixel))/((100*log10(1 + maxLum)) * ( powf((log(2+8*(val_pixel/maxLum))), (log(q)/log(0.5)) ) )	);
+}
+__global__ void find_maximum_kernel(float *array, int *mutex, unsigned int n, int blockSize){
+    unsigned int index = threadIdx.x + blockIdx.x*blockDim.x;
+    unsigned int stride = gridDim.x*blockDim.x;
+    unsigned int offset = 0;
 
-    if(v == 0.0f) // black
-        h = s = 0.0f;
-    else {
-        s = diff / v;
-        if(diff < 0.001f)  // grey
-            h = 0.0f;
-        else { // color
-            if(max == r) {
-                h = 60.0f * (g - b)/diff;
-                if(h < 0.0f)
-                    h += 360.0f;
-            } else if(max == g)
-                h = 60.0f * (2 + (b - r)/diff);
-            else
-                h = 60.0f * (4 + (r - g)/diff);
+    extern	__shared__ float cache[];
+
+    float temp = -1.0;
+    while(index + offset < n){
+        temp = fmaxf(temp, array[index + offset]);
+
+        offset += stride;
+    }
+
+    cache[threadIdx.x] = temp;
+
+    __syncthreads();
+    // reduction
+    unsigned int i = blockDim.x/2;
+    while(i != 0){
+        if(threadIdx.x < i){
+            cache[threadIdx.x] = fmaxf(cache[threadIdx.x], cache[threadIdx.x + i]);
         }
-    }
-    return (float4) {h, s, l, a};
-}
 
-__device__ float4 convert_pixel_to_rgb(float4 pixel) {
-    float r, g, b;
-    float h, s, l;
-    float c, x, hi, m;
-
-    h = pixel.x;
-    s = pixel.y;
-    l = pixel.z;
-
-    hi = h/60.0f;
-
-//    c = (1 - fabsf(2*l -1)) * s;
-    c = (1 - fabsf(l*(powf(2,1)-1) -1)) * s;
-    x = c * (1 - fabsf(fmodf(hi, 2) - 1));
-    m = (l - c/2);
-
-    if(h >= 0.0f && h < 60.0f) {
-        r = c;
-        g = x;
-        b = 0;
-    } else if(h >= 60.0f && h < 120.0f) {
-        r = x;
-        g = c;
-        b = 0;
-    } else if(h >= 120.0f && h < 180.0f) {
-        r = 0;
-        g = c;
-        b = x;
-    } else if(h >= 180.0f && h < 240.0f) {
-        r = 0;
-        g = x;
-        b = c;
-    } else if(h >= 240.0f && h < 300.0f) {
-        r = x;
-        g = 0;
-        b = c;
-    } else if(h >= 300.0f && h < 360.0f) {
-        r = c;
-        g = 0;
-        b = x;
+        __syncthreads();
+        i /= 2;
     }
 
-    r = (r + m)*255.0f;
-    g = (g + m)*255.0f;
-    b = (b + m)*255.0f;
-
-    return (float4) {r, g, b, pixel.w};
+    if(threadIdx.x == 0){
+        while(atomicCAS(mutex,0,1) != 0);  //lock
+        maxLum = fmaxf(maxLum, cache[0]);
+        atomicExch(mutex, 0);  //unlock
+    }
 }
 
-__device__ float log_mapping(float world_lum, float max_lum, float q, float k, float lum) {
-    float a, b, lum_d;
-    a = 1 + q * lum;
-    b = 1 + k * max_lum;
-    lum_d = log10f(a)/log10f(b);
-
-    return lum_d;
-}
-
-__global__ void tmo(float* imageIn, float* imageOut, int width, int height, float world_lum,
-                    float max_lum, float q, float k)
-{
-    float p_red, p_green, p_blue;
-    float4 pixel_hsl, pixel_rgb;
-
+__global__ void tonemap_adaptive(float* imageIn, float* imageOut, int width, int height, int channels, int depth, float q, float k){
+    //printf("maxLum : %f\n", maxLum);
     int Row = blockDim.y * blockIdx.y + threadIdx.y;
     int Col = blockDim.x * blockIdx.x + threadIdx.x;
 
     if(Row < height && Col < width) {
-        p_red = imageIn[(Row*width+Col)*3+RED];
-        p_green = imageIn[(Row*width+Col)*3+GREEN];
-        p_blue = imageIn[(Row*width+Col)*3+BLUE];
+        float R, G, B, L, nL, scale;
 
-        pixel_hsl = convert_pixel_to_hsl(make_float4(p_red, p_green, p_blue, 0.0));
+        R = imageIn[(Row*width+Col)*3+RED];
+        G = imageIn[(Row*width+Col)*3+GREEN];
+        B = imageIn[(Row*width+Col)*3+BLUE];
 
-        pixel_hsl.z = log_mapping(world_lum, max_lum, q, k, pixel_hsl.z);
-//        pixel_hsl.y = log_mapping(world_lum, max_lum, q, k, pixel_hsl.y);
-//        pixel_hsl.x = log_mapping(world_lum, max_lum, q, k, pixel_hsl.x);
-//	    pixel_hsl.z += 0.01;
+        L = 0.2126 * R + 0.7152 * G + 0.0722 * B;
+        nl = adaptive_mapping(k, q, L);
+        scale = nL / L;
 
-        pixel_rgb = convert_pixel_to_rgb(pixel_hsl);
+        R *= scale;
+        G *= scale;
+        B *= scale;
 
-//        imageOut[(Row*width+Col)*3+BLUE] = log_mapping(world_lum, max_lum, q, k, p_blue);
-//        imageOut[(Row*width+Col)*3+GREEN] = log_mapping(world_lum, max_lum, q, k, p_green);
-//        imageOut[(Row*width+Col)*3+RED] = log_mapping(world_lum, max_lum, q, k, p_red);
-
-
-        imageOut[(Row*width+Col)*3+BLUE] = pixel_rgb.z;
-        imageOut[(Row*width+Col)*3+GREEN] = pixel_rgb.y;
-        imageOut[(Row*width+Col)*3+RED] = pixel_rgb.x;
+        imageOut[(Row*width+Col)*3+BLUE] = B;
+        imageOut[(Row*width+Col)*3+GREEN] = G;
+        imageOut[(Row*width+Col)*3+RED] = R;
     }
 }
 
-// Iout(x,y)=(Iin(x,y)⋅2ᶺf)ᶺ(1/g)
+__global__ void tonemap_logarithmic(float* imageIn, float* imageOut, int width, int height, int channels, int depth, float q, float k){
+    //printf("maxLum : %f\n", maxLum);
+    int Row = blockDim.y * blockIdx.y + threadIdx.y;
+    int Col = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if(Row < height && Col < width) {
+        imageOut[(Row*width+Col)*3+BLUE] = logarithmic_mapping(k, q, imageIn[(Row*width+Col)*3+BLUE]);
+        imageOut[(Row*width+Col)*3+GREEN] = logarithmic_mapping(k, q, imageIn[(Row*width+Col)*3+GREEN]);
+        imageOut[(Row*width+Col)*3+RED] = logarithmic_mapping(k, q, imageIn[(Row*width+Col)*3+RED]);
+    }
+}
+
+void showImage(Mat &image, const char *window) {
+    namedWindow(window, CV_WINDOW_NORMAL);
+    imshow(window, image);
+}
 
 __device__ float gamma_correction(float f_stop, float gamma, float val)
 {
     return powf((val*powf(2,f_stop)),(1.0/gamma));
 }
 
-__global__ void tonemap(float* imageIn, float* imageOut, int width, int height, int channels, int depth, float f_stop,
-                        float gamma)
+__global__ void tonemap_gamma(float* imageIn, float* imageOut, int width, int height, int channels, int depth, float f_stop,
+                              float gamma)
 {
     int Row = blockDim.y * blockIdx.y + threadIdx.y;
     int Col = blockDim.x * blockIdx.x + threadIdx.x;
@@ -193,35 +150,31 @@ __global__ void tonemap(float* imageIn, float* imageOut, int width, int height, 
     }
 }
 
-void showImage(Mat &image, const char *window) {
-    namedWindow(window, CV_WINDOW_NORMAL);
-    imshow(window, image);
-}
-
-int main(int argc, char** argv)
-{
+int main(int argc, char** argv){
     char* image_name = argv[1];
-    char* image_out_name = argv[6];
+    char* image_out_name = argv[5];
     float *h_ImageData, *d_ImageData, *d_ImageOut, *h_ImageOut;
+    char * option;
     Mat hdr, ldr;
     Size imageSize;
     int width, height, channels, sizeImage;
-    float world_lum=0.0, max_lum=0.0, q=0.0, k=0.0;
-    int show_flag = 0;
+    float q=0.0, k=0.0;
+    int show_flag, N;
+    int *d_mutex;
 //	std::vector<Mat>images;
 
 //	printf("%s\n", image_name);
     hdr = imread(image_name, -1);
     if(argc !=7 || !hdr.data) {
         printf("No image Data \n");
-        printf("Usage: ./test <file_path> <world_lum> <max_lum> <q> <k> <image_out_name>\n");
+        printf("Usage: ./test <file_path> <q|f-stop|b> <k|gamma|Lscreen> <show_flag> <output_file_path> [L|G|A]\n");
         return -1;
     }
 
-    world_lum = atof(argv[2]);
-    max_lum = atof(argv[3]);
-    q = atof(argv[4]);
-    k = atof(argv[5]);
+    q = atof(argv[2]);
+    k = atof(argv[3]);
+    show_flag = atoi(argv[4]);
+    option = argv[6];
 
     if(hdr.empty()) {
         printf("Couldn't find or open the image...\n");
@@ -231,13 +184,14 @@ int main(int argc, char** argv)
     width = imageSize.width;
     height = imageSize.height;
     channels = hdr.channels();
+    N = width*height*channels;
     sizeImage = sizeof(float)*width*height*channels;
 
     //printf("Width: %d\nHeight: %d\n", width, height);
     std::string ty =  type2str( hdr.type() );
 //	printf("Image: %s %dx%d \n", ty.c_str(), hdr.cols, hdr.rows );
 
-    //printf("Channels: %d\nDepth: %d\n", hdr.channels(), hdr.depth());
+    printf("Channels: %d\nDepth: %d\n", hdr.channels(), hdr.depth());
 
     h_ImageData = (float *) malloc (sizeImage);
     h_ImageData = (float *)hdr.data;
@@ -247,17 +201,50 @@ int main(int argc, char** argv)
     cudaEventCreate(&stop);
     float milliseconds = 0;
 
+    checkError(cudaMalloc((void**)&d_mutex, sizeof(int)));
     checkError(cudaMalloc((void **)&d_ImageData, sizeImage));
     checkError(cudaMalloc((void **)&d_ImageOut, sizeImage));
     checkError(cudaMemcpy(d_ImageData, h_ImageData, sizeImage, cudaMemcpyHostToDevice));
 
+    cudaMemset(d_mutex, 0, sizeof(int));
+
     int blockSize = 32;
     dim3 dimBlock(blockSize, blockSize, 1);
     dim3 dimGrid(ceil(width/float(blockSize)), ceil(height/float(blockSize)), 1);
-    cudaEventRecord(start);
-//    tonemap<<<dimGrid, dimBlock>>>(d_ImageData, d_ImageOut, width, height, channels, 32, f_stop, gamma);
-    tmo<<<dimGrid, dimBlock>>>(d_ImageData, d_ImageOut, width, height, world_lum, max_lum, q, k);
-    cudaEventRecord(stop);
+    switch(option[0]){
+        case 'a':
+        case 'A':
+            printf("Adaptive logarithmic mapping\n");
+            cudaEventRecord(start);
+            find_maximum_kernel<<< dimGrid, dimBlock, sizeof(float)*blockSize >>>(d_ImageData, d_mutex, N, blockSize);
+            cudaDeviceSynchronize();
+            tonemap_adaptive<<<dimGrid, dimBlock>>>(d_ImageData, d_ImageOut, width, height, channels, 32, q, k);
+            cudaEventRecord(stop);
+            break;
+        case 'l':
+        case 'L':
+            printf("Logarithmic_mapping\n");
+            cudaEventRecord(start);
+            find_maximum_kernel<<< dimGrid, dimBlock, sizeof(float)*blockSize >>>(d_ImageData, d_mutex, N, blockSize);
+            cudaDeviceSynchronize();
+            tonemap_logarithmic<<<dimGrid, dimBlock>>>(d_ImageData, d_ImageOut, width, height, channels, 32, q, k);
+            cudaEventRecord(stop);
+            break;
+
+        case 'g':
+        case 'G':
+            printf("Gamma_correction\n");
+            cudaEventRecord(start);
+            tonemap_gamma<<<dimGrid, dimBlock>>>(d_ImageData, d_ImageOut, width, height, channels, 32, q, k);
+            cudaEventRecord(stop);
+            break;
+
+        default:
+            free(h_ImageOut); cudaFree(d_ImageData); cudaFree(d_ImageOut); cudaFree(d_mutex);
+            printf("Wrong choice\n");
+            return -1;
+    }
+
     cudaDeviceSynchronize();
     cudaEventElapsedTime(&milliseconds, start, stop);
     printf("%s|%.10f\n", image_name, milliseconds/1000.0);
@@ -277,7 +264,7 @@ int main(int argc, char** argv)
         waitKey(0);
     }
 
-    free(h_ImageOut); cudaFree(d_ImageData); cudaFree(d_ImageOut);
+    free(h_ImageOut); cudaFree(d_ImageData); cudaFree(d_ImageOut); cudaFree(d_mutex);
 
     return 0;
 }
